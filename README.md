@@ -79,4 +79,4 @@ The phone and daemon exchange JSON messages over a WebSocket, defined in [docs/P
 
 ## License
 
-Private repository. All rights reserved.
+[MIT](LICENSE)
