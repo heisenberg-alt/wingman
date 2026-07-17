@@ -116,9 +116,15 @@ func (c *conn) call(ctx context.Context, msgType, sessionID string, payload any)
 	}
 }
 
-func cmdList(args []string) {
-	fs := flag.NewFlagSet("list", flag.ExitOnError)
+// newFlagSet creates a flag set pre-populated with the shared --addr flag.
+func newFlagSet(name string) (*flag.FlagSet, *string) {
+	fs := flag.NewFlagSet(name, flag.ExitOnError)
 	addr := fs.String("addr", "ws://127.0.0.1:7420/ws", "wingmand WebSocket address")
+	return fs, addr
+}
+
+func cmdList(args []string) {
+	fs, addr := newFlagSet("list")
 	_ = fs.Parse(args)
 
 	ctx := context.Background()
@@ -139,8 +145,7 @@ func cmdList(args []string) {
 }
 
 func cmdRun(args []string) {
-	fs := flag.NewFlagSet("run", flag.ExitOnError)
-	addr := fs.String("addr", "ws://127.0.0.1:7420/ws", "wingmand WebSocket address")
+	fs, addr := newFlagSet("run")
 	cwd := fs.String("cwd", "", "working directory for the session (required)")
 	prompt := fs.String("prompt", "", "initial prompt")
 	_ = fs.Parse(args)
@@ -156,16 +161,15 @@ func cmdRun(args []string) {
 	fatalIf(err)
 	var info proto.SessionInfo
 	fatalIf(json.Unmarshal(res.Data, &info))
-	fmt.Printf("● session %s created in %s\n", info.ID, info.Cwd)
+	fmt.Printf("session %s created in %s\n", info.ID, info.Cwd)
 
 	_, err = c.call(ctx, proto.CmdSessionWatch, info.ID, proto.SessionWatch{FromSeq: 0})
 	fatalIf(err)
-	stream(ctx, c, info.ID)
+	stream(ctx, c, info.ID, true)
 }
 
 func cmdWatch(args []string) {
-	fs := flag.NewFlagSet("watch", flag.ExitOnError)
-	addr := fs.String("addr", "ws://127.0.0.1:7420/ws", "wingmand WebSocket address")
+	fs, addr := newFlagSet("watch")
 	sessionID := fs.String("session", "", "session id (required)")
 	fromSeq := fs.Uint64("from-seq", 0, "replay events after this sequence number")
 	_ = fs.Parse(args)
@@ -178,11 +182,12 @@ func cmdWatch(args []string) {
 	fatalIf(err)
 	_, err = c.call(ctx, proto.CmdSessionWatch, *sessionID, proto.SessionWatch{FromSeq: *fromSeq})
 	fatalIf(err)
-	stream(ctx, c, *sessionID)
+	stream(ctx, c, *sessionID, false)
 }
 
 // stream renders session events and answers permission requests interactively.
-func stream(ctx context.Context, c *conn, sessionID string) {
+// When exitOnTurnEnd is set it returns after the first completed turn.
+func stream(ctx context.Context, c *conn, sessionID string, exitOnTurnEnd bool) {
 	stdin := bufio.NewReader(os.Stdin)
 	for env := range c.events {
 		switch env.Type {
@@ -200,7 +205,7 @@ func stream(ctx context.Context, c *conn, sessionID string) {
 		case proto.EvtPermissionRequest:
 			var p proto.PermissionRequest
 			_ = json.Unmarshal(env.Payload, &p)
-			fmt.Printf("\n🔐 permission requested: %s\n", p.Title)
+			fmt.Printf("\npermission requested: %s\n", p.Title)
 			for i, o := range p.Options {
 				fmt.Printf("  [%d] %s (%s)\n", i+1, o.Name, o.Kind)
 			}
@@ -221,12 +226,15 @@ func stream(ctx context.Context, c *conn, sessionID string) {
 		case proto.EvtPermissionResolved:
 			var p proto.PermissionResolved
 			_ = json.Unmarshal(env.Payload, &p)
-			fmt.Printf("   ↳ resolved by %s\n", p.ResolvedBy)
+			fmt.Printf("   resolved by %s\n", p.ResolvedBy)
 
 		case proto.EvtTurnEnded:
 			var p proto.TurnEnded
 			_ = json.Unmarshal(env.Payload, &p)
-			fmt.Printf("\n■ turn ended: %s\n", p.StopReason)
+			fmt.Printf("\nturn ended: %s\n", p.StopReason)
+			if exitOnTurnEnd {
+				return
+			}
 		}
 	}
 }
@@ -256,7 +264,7 @@ func renderDelta(payload json.RawMessage) {
 			Title string `json:"title"`
 		}
 		_ = json.Unmarshal(d.Data, &tc)
-		fmt.Printf("\n🔧 %s\n", tc.Title)
+		fmt.Printf("\n[tool] %s\n", tc.Title)
 	case "tool_call_update", "plan", "available_commands_update":
 		// quiet in the CLI renderer
 	default:

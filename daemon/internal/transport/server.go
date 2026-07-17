@@ -7,7 +7,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"log/slog"
 	"net/http"
 	"sync"
 
@@ -20,7 +19,6 @@ import (
 // Server handles WebSocket clients speaking the Wingman protocol.
 type Server struct {
 	Manager *session.Manager
-	Logger  *slog.Logger
 }
 
 // Handler returns the HTTP handler for the /ws endpoint.

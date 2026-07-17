@@ -47,15 +47,11 @@ type RequestHandler func(ctx context.Context, method string, params json.RawMess
 type Options struct {
 	// Command is the copilot binary; defaults to "copilot".
 	Command string
-	// Args are extra arguments appended after "--acp --stdio".
-	Args []string
 	// Dir is the working directory for the subprocess.
 	Dir string
 	// OnNotification and OnRequest wire agent→client traffic.
 	OnNotification NotificationHandler
 	OnRequest      RequestHandler
-	// Stderr receives the subprocess's stderr; defaults to os.Stderr.
-	Stderr io.Writer
 }
 
 // Client is a JSON-RPC 2.0 NDJSON client bound to one ACP subprocess.
@@ -83,14 +79,9 @@ func Spawn(ctx context.Context, opts Options) (*Client, error) {
 	if bin == "" {
 		bin = "copilot"
 	}
-	args := append([]string{"--acp", "--stdio"}, opts.Args...)
-	cmd := exec.CommandContext(ctx, bin, args...)
+	cmd := exec.CommandContext(ctx, bin, "--acp", "--stdio")
 	cmd.Dir = opts.Dir
-	if opts.Stderr != nil {
-		cmd.Stderr = opts.Stderr
-	} else {
-		cmd.Stderr = os.Stderr
-	}
+	cmd.Stderr = os.Stderr
 
 	stdin, err := cmd.StdinPipe()
 	if err != nil {

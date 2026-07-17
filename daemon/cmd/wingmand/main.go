@@ -62,7 +62,7 @@ func cmdServe(args []string) {
 	})
 	defer mgr.CloseAll()
 
-	srv := &transport.Server{Manager: mgr, Logger: logger}
+	srv := &transport.Server{Manager: mgr}
 	httpSrv := &http.Server{Addr: *listen, Handler: srv.Handler()}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)

@@ -75,8 +75,7 @@ type Session struct {
 }
 
 type pendingPermission struct {
-	options []acp.PermissionOption
-	ch      chan string // buffered(1); receives chosen optionId, "" = cancel
+	ch chan string // buffered(1); receives chosen optionId, "" = cancel
 }
 
 // Create spawns a copilot ACP subprocess, performs the handshake, and opens a
@@ -256,7 +255,7 @@ func (s *Session) onRequest(ctx context.Context, method string, params json.RawM
 	}
 
 	requestID := newID()
-	p := &pendingPermission{options: req.Options, ch: make(chan string, 1)}
+	p := &pendingPermission{ch: make(chan string, 1)}
 
 	s.mu.Lock()
 	s.pending[requestID] = p

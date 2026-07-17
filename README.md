@@ -1,58 +1,82 @@
-<div align="center">
-
 # Wingman
 
-**Monitor, prompt, and approve GitHub Copilot CLI sessions — from your phone.**
-
-</div>
+Remote control for GitHub Copilot CLI. Monitor, prompt, and approve agent sessions from your phone.
 
 ![Wingman architecture](docs/architecture.svg)
 
-Wingman is a mobile companion for the [GitHub Copilot CLI](https://github.com/github/copilot-cli). A lightweight daemon (`wingmand`) on your dev machine drives Copilot CLI through its [ACP server](https://docs.github.com/en/copilot/reference/copilot-cli-reference/acp-server), and the Wingman iOS app lets you:
+## Overview
 
-- 📋 See every session across your machines — live status at a glance
-- 💬 Watch transcripts stream in real time and send follow-up prompts
-- ✅ Approve or deny tool-use requests — even from the lock screen
-- 🚀 Kick off new sessions remotely ("fix the failing CI on branch X")
-- 🖥 Drop into a raw terminal or review diffs before they land
+Wingman consists of three components:
+
+- **`wingmand`** — a Go daemon on your development machine that drives [GitHub Copilot CLI](https://github.com/github/copilot-cli) sessions through its [Agent Client Protocol (ACP) server](https://docs.github.com/en/copilot/reference/copilot-cli-reference/acp-server), one subprocess per session.
+- **`relayd`** — a zero-knowledge relay that routes end-to-end encrypted frames between daemon and phone, and delivers push notifications. *(Phase 2)*
+- **Wingman for iOS** — a native SwiftUI app for observing and steering sessions. *(Phase 3)*
+
+### Capabilities
+
+- List sessions across machines with live status
+- Stream transcripts in real time and send follow-up prompts
+- Approve or deny tool-use permission requests remotely
+- Start new sessions in trusted directories
+- Raw terminal access and diff review *(Phase 5)*
 
 ## Security model
 
-- **End-to-end encrypted.** Phone ↔ daemon traffic uses a Noise XX channel (X25519 + ChaCha20-Poly1305). The relay routes opaque ciphertext by rendezvous ID and can never read payloads.
-- **Credentials stay home.** Copilot CLI keeps its own GitHub auth on your dev machine. Nothing GitHub-related ever transits the relay.
-- **Explicit pairing.** Devices are paired once by scanning a QR code printed in your terminal; keys live in the iOS Keychain and `~/.wingman/keys`.
-- **Fail-safe approvals.** If your phone is unreachable, pending permission requests time out to *deny*.
+- **End-to-end encryption.** Phone-to-daemon traffic is carried inside a Noise XX channel (X25519, ChaCha20-Poly1305). The relay routes opaque ciphertext by rendezvous ID and cannot read payloads.
+- **Credentials stay local.** Copilot CLI retains its own GitHub authentication on the development machine. No GitHub tokens transit the relay.
+- **Explicit device pairing.** Devices pair once by scanning a QR code printed in the terminal. Keys are stored in the iOS Keychain and in `~/.wingman/keys`.
+- **Fail-safe approvals.** If no paired device responds, pending permission requests are denied after a configurable timeout (default: 5 minutes).
+- **Loopback by default.** In Phase 1 the daemon listens on `127.0.0.1` only.
 
 ## Repository layout
 
 | Path | Description |
-|---|---|
-| `daemon/` | `wingmand` — Go daemon: ACP client, session manager, transport |
-| `relay/` | `relayd` — zero-knowledge relay + APNs push (Phase 2) |
-| `ios/` | Wingman SwiftUI app (Phase 3) |
-| `docs/` | [Protocol spec](docs/PROTOCOL.md), architecture |
+|------|-------------|
+| `daemon/` | `wingmand` daemon: ACP client, session manager, transport |
+| `relay/` | `relayd` relay service (Phase 2) |
+| `ios/` | Wingman iOS app (Phase 3) |
+| `docs/` | [Protocol specification](docs/PROTOCOL.md) and architecture |
 
-## Quick start (Phase 1 — local loopback)
+## Getting started
 
-Requires Go 1.25+ and an authenticated [Copilot CLI](https://github.com/github/copilot-cli) ≥ 1.0.44.
+Requirements: Go 1.25+ and an authenticated [GitHub Copilot CLI](https://github.com/github/copilot-cli) 1.0.44 or later.
+
+Verify that the Copilot CLI ACP server responds:
 
 ```sh
-# Check that Copilot CLI's ACP server responds
 go run ./daemon/cmd/wingmand doctor
+```
 
-# Start the daemon (loopback WebSocket on :7420)
+Start the daemon (loopback WebSocket on `127.0.0.1:7420`):
+
+```sh
 go run ./daemon/cmd/wingmand serve
+```
 
-# In another terminal: run a session end-to-end from the test client
+Drive a session end to end with the test client:
+
+```sh
 go run ./daemon/cmd/wingman-cli run --cwd ~/some/project --prompt "explain this repo"
 ```
 
-## Status
+The client streams the transcript, surfaces permission requests for interactive approval, and exits when the turn completes. Use `wingman-cli list` to enumerate sessions and `wingman-cli watch --session ID` to attach to a running session.
 
-- [x] Phase 0 — repo, architecture, protocol spec
-- [ ] Phase 1 — daemon core + ACP integration *(in progress)*
-- [ ] Phase 2 — Noise E2E channel, QR pairing, relay
-- [ ] Phase 3 — iOS app MVP
-- [ ] Phase 4 — APNs push + lock-screen approvals
-- [ ] Phase 5 — PTY terminal, diff viewer, usage stats
-- [ ] Phase 6 — hardening, Android
+## Protocol
+
+The phone and daemon exchange JSON messages over a WebSocket, defined in [docs/PROTOCOL.md](docs/PROTOCOL.md). Every session event carries a monotonic sequence number; clients resume after a disconnect by replaying from their last acknowledged sequence. Permission requests block the CLI until answered and fail safe to deny.
+
+## Roadmap
+
+| Phase | Scope | Status |
+|-------|-------|--------|
+| 0 | Repository, architecture, protocol specification | Complete |
+| 1 | Daemon core, ACP integration, loopback transport | Complete |
+| 2 | Noise E2E channel, QR pairing, relay | Planned |
+| 3 | iOS app | Planned |
+| 4 | Push notifications, lock-screen approvals | Planned |
+| 5 | PTY terminal, diff viewer, usage statistics | Planned |
+| 6 | Hardening, Android | Planned |
+
+## License
+
+Private repository. All rights reserved.
