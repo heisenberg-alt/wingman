@@ -1,0 +1,209 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 660" font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif" role="img" aria-label="Wingman architecture diagram">
+  <style>
+    :root {
+      --bg: #ffffff;
+      --zone-fill: #f6f8fa;
+      --zone-stroke: #d1d9e0;
+      --zone-label: #59636e;
+      --box-fill: #ffffff;
+      --box-stroke: #d1d9e0;
+      --title: #1f2328;
+      --text: #59636e;
+      --accent: #0969da;      /* blue  — control plane */
+      --accent2: #8250df;     /* purple — copilot */
+      --accent3: #1a7f37;     /* green — secure channel */
+      --accent4: #bc4c00;     /* orange — push */
+      --chip-fill: #ddf4ff;
+      --chip-text: #0969da;
+      --chip2-fill: #fbefff;
+      --chip2-text: #8250df;
+      --chip3-fill: #dafbe1;
+      --chip3-text: #1a7f37;
+      --dash: #8c959f;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0d1117;
+        --zone-fill: #161b22;
+        --zone-stroke: #30363d;
+        --zone-label: #8d96a0;
+        --box-fill: #1c2128;
+        --box-stroke: #3d444d;
+        --title: #f0f6fc;
+        --text: #9198a1;
+        --accent: #4493f8;
+        --accent2: #ab7df8;
+        --accent3: #3fb950;
+        --accent4: #f0883e;
+        --chip-fill: #121d2f;
+        --chip-text: #4493f8;
+        --chip2-fill: #221a32;
+        --chip2-text: #ab7df8;
+        --chip3-fill: #12261e;
+        --chip3-text: #3fb950;
+        --dash: #6e7681;
+      }
+    }
+    .zone { fill: var(--zone-fill); stroke: var(--zone-stroke); stroke-width: 1.5; rx: 16; }
+    .zone-label { fill: var(--zone-label); font-size: 12px; font-weight: 600; letter-spacing: 1.2px; text-transform: uppercase; }
+    .box { fill: var(--box-fill); stroke: var(--box-stroke); stroke-width: 1.25; rx: 10; }
+    .box-title { fill: var(--title); font-size: 15px; font-weight: 600; }
+    .box-sub { fill: var(--text); font-size: 11.5px; }
+    .flow-label { font-size: 11px; font-weight: 600; }
+    .flow-sub { font-size: 10px; fill: var(--text); }
+    .chip { font-size: 10px; font-weight: 600; }
+    .brand { fill: var(--title); font-size: 22px; font-weight: 700; }
+    .tagline { fill: var(--text); font-size: 12.5px; }
+  </style>
+
+  <rect width="1200" height="660" fill="var(--bg)"/>
+
+  <!-- Header -->
+  <text class="brand" x="48" y="52">Wingman</text>
+  <text class="tagline" x="48" y="74">Monitor, prompt, and approve GitHub Copilot CLI sessions — from your phone.</text>
+
+  <defs>
+    <marker id="arrow-blue" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--accent)"/>
+    </marker>
+    <marker id="arrow-purple" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--accent2)"/>
+    </marker>
+    <marker id="arrow-green" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--accent3)"/>
+    </marker>
+    <marker id="arrow-orange" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 z" fill="var(--accent4)"/>
+    </marker>
+  </defs>
+
+  <!-- ═══════════ Zone: Dev machine ═══════════ -->
+  <rect class="zone" x="48" y="110" width="420" height="440" rx="16"/>
+  <text class="zone-label" x="72" y="140">Dev machine · macOS / Linux</text>
+
+  <!-- copilot ACP subprocesses -->
+  <g>
+    <rect class="box" x="84" y="356" width="150" height="72" rx="10"/>
+    <rect class="box" x="92" y="348" width="150" height="72" rx="10"/>
+    <rect class="box" x="100" y="340" width="150" height="72" rx="10"/>
+    <text class="box-title" x="118" y="368" font-size="13.5">copilot --acp</text>
+    <text class="box-sub" x="118" y="386">one subprocess</text>
+    <text class="box-sub" x="118" y="400">per session</text>
+  </g>
+
+  <!-- wingmand daemon -->
+  <rect class="box" x="84" y="170" width="348" height="120" rx="10"/>
+  <text class="box-title" x="108" y="200">wingmand</text>
+  <text class="box-sub" x="108" y="220">Go daemon · session manager · event log (SQLite)</text>
+  <text class="box-sub" x="108" y="236">pending-permission registry · seq replay on reconnect</text>
+  <rect x="108" y="250" width="86" height="20" rx="10" fill="var(--chip2-fill)"/>
+  <text class="chip" x="120" y="264" fill="var(--chip2-text)">ACP client</text>
+  <rect x="202" y="250" width="94" height="20" rx="10" fill="var(--chip3-fill)"/>
+  <text class="chip" x="214" y="264" fill="var(--chip3-text)">Noise XX E2E</text>
+  <rect x="304" y="250" width="70" height="20" rx="10" fill="var(--chip-fill)"/>
+  <text class="chip" x="316" y="264" fill="var(--chip-text)">PTY · diff</text>
+
+  <!-- workspace box -->
+  <rect class="box" x="288" y="340" width="144" height="88" rx="10"/>
+  <text class="box-title" x="308" y="368" font-size="13.5">Workspaces</text>
+  <text class="box-sub" x="308" y="386">trusted dirs</text>
+  <text class="box-sub" x="308" y="400">git repos</text>
+
+  <!-- GitHub auth note -->
+  <rect x="84" y="470" width="348" height="52" rx="10" fill="none" stroke="var(--dash)" stroke-width="1.25" stroke-dasharray="5 4"/>
+  <text class="box-sub" x="108" y="491">🔑 GitHub credentials never leave this machine —</text>
+  <text class="box-sub" x="108" y="507">Copilot CLI keeps its own auth. Relay sees only ciphertext.</text>
+
+  <!-- daemon -> copilot ACP arrow -->
+  <path d="M 170 290 L 170 336" stroke="var(--accent2)" stroke-width="2" fill="none" marker-end="url(#arrow-purple)" marker-start="url(#arrow-purple)"/>
+  <text class="flow-label" x="182" y="312" fill="var(--accent2)">ACP · JSON-RPC</text>
+  <text class="flow-sub" x="182" y="326">NDJSON over stdio</text>
+
+  <!-- copilot -> workspace -->
+  <path d="M 254 384 L 284 384" stroke="var(--accent2)" stroke-width="2" fill="none" marker-end="url(#arrow-purple)"/>
+
+  <!-- ═══════════ Zone: Relay ═══════════ -->
+  <rect class="zone" x="548" y="200" width="240" height="240" rx="16"/>
+  <text class="zone-label" x="572" y="230">Cloud · zero-knowledge</text>
+
+  <rect class="box" x="572" y="252" width="192" height="120" rx="10"/>
+  <text class="box-title" x="592" y="282">relayd</text>
+  <text class="box-sub" x="592" y="302">Go relay · dumb pipe</text>
+  <text class="box-sub" x="592" y="318">routes opaque E2E frames</text>
+  <text class="box-sub" x="592" y="334">by rendezvous ID</text>
+  <rect x="592" y="344" width="52" height="20" rx="10" fill="var(--chip-fill)"/>
+  <text class="chip" x="604" y="358" fill="var(--chip-text)">APNs</text>
+
+  <!-- no plaintext badge -->
+  <rect x="572" y="392" width="192" height="28" rx="14" fill="none" stroke="var(--accent3)" stroke-width="1.25" stroke-dasharray="5 4"/>
+  <text class="chip" x="600" y="410" fill="var(--accent3)">🔒 cannot read any payload</text>
+
+  <!-- daemon -> relay arrow -->
+  <path d="M 436 300 C 490 300, 500 306, 544 306" stroke="var(--accent3)" stroke-width="2.25" fill="none" marker-end="url(#arrow-green)" marker-start="url(#arrow-green)"/>
+  <text class="flow-label" x="446" y="270" fill="var(--accent3)">outbound WSS</text>
+  <text class="flow-sub" x="446" y="284">E2E · NAT-friendly</text>
+
+  <!-- ═══════════ Zone: iPhone ═══════════ -->
+  <rect class="zone" x="868" y="110" width="284" height="440" rx="16"/>
+  <text class="zone-label" x="892" y="140">iPhone · iOS 17+</text>
+
+  <!-- phone silhouette -->
+  <rect class="box" x="904" y="166" width="212" height="356" rx="24"/>
+  <rect x="972" y="178" width="76" height="8" rx="4" fill="var(--zone-stroke)"/>
+
+  <text class="box-title" x="928" y="216">Wingman app</text>
+  <text class="box-sub" x="928" y="234">SwiftUI</text>
+
+  <!-- app feature rows -->
+  <g>
+    <rect x="928" y="250" width="164" height="34" rx="8" fill="var(--chip-fill)"/>
+    <text class="chip" x="940" y="271" fill="var(--chip-text)">📋 Session dashboard</text>
+
+    <rect x="928" y="292" width="164" height="34" rx="8" fill="var(--chip-fill)"/>
+    <text class="chip" x="940" y="313" fill="var(--chip-text)">💬 Live transcript + prompts</text>
+
+    <rect x="928" y="334" width="164" height="34" rx="8" fill="var(--chip3-fill)"/>
+    <text class="chip" x="940" y="355" fill="var(--chip3-text)">✅ Approve / deny tools</text>
+
+    <rect x="928" y="376" width="164" height="34" rx="8" fill="var(--chip2-fill)"/>
+    <text class="chip" x="940" y="397" fill="var(--chip2-text)">🖥 Terminal + diff viewer</text>
+
+    <rect x="928" y="418" width="164" height="34" rx="8" fill="var(--chip-fill)"/>
+    <text class="chip" x="940" y="439" fill="var(--chip-text)">🔐 CryptoKit · Keychain</text>
+  </g>
+
+  <text class="box-sub" x="928" y="492">Notification Service Ext.</text>
+  <text class="box-sub" x="928" y="507">decrypts pushes · lock-screen actions</text>
+
+  <!-- relay -> phone arrow -->
+  <path d="M 792 306 C 840 306, 850 306, 900 306" stroke="var(--accent3)" stroke-width="2.25" fill="none" marker-end="url(#arrow-green)" marker-start="url(#arrow-green)"/>
+  <text class="flow-label" x="800" y="288" fill="var(--accent3)">WSS</text>
+  <text class="flow-sub" x="800" y="301">E2E encrypted</text>
+
+  <!-- APNs push arrow -->
+  <path d="M 668 440 C 668 496, 800 500, 896 478" stroke="var(--accent4)" stroke-width="2" stroke-dasharray="6 5" fill="none" marker-end="url(#arrow-orange)"/>
+  <text class="flow-label" x="620" y="524" fill="var(--accent4)">APNs push · encrypted payload</text>
+  <text class="flow-sub" x="620" y="538">“Copilot needs approval” → act from lock screen</text>
+
+  <!-- LAN direct arrow (over the top) -->
+  <path d="M 436 190 C 620 128, 740 128, 900 178" stroke="var(--accent)" stroke-width="2" stroke-dasharray="6 5" fill="none" marker-end="url(#arrow-blue)" marker-start="url(#arrow-blue)"/>
+  <text class="flow-label" x="588" y="122" fill="var(--accent)">LAN direct · Bonjour discovery</text>
+  <text class="flow-sub" x="588" y="136">same E2E channel, no relay needed</text>
+
+  <!-- Pairing note -->
+  <path d="M 436 530 C 600 576, 740 574, 900 544" stroke="var(--dash)" stroke-width="1.5" stroke-dasharray="3 5" fill="none" marker-end="url(#arrow-blue)"/>
+  <text class="flow-label" x="470" y="596" fill="var(--zone-label)">⧉ one-time pairing: scan QR in terminal → Noise XX handshake → device keys</text>
+
+  <!-- Legend -->
+  <g>
+    <text class="flow-sub" x="48" y="634" font-weight="600">Flows:</text>
+    <line x1="100" y1="630" x2="130" y2="630" stroke="var(--accent2)" stroke-width="2.5"/>
+    <text class="flow-sub" x="136" y="634">Copilot ACP</text>
+    <line x1="220" y1="630" x2="250" y2="630" stroke="var(--accent3)" stroke-width="2.5"/>
+    <text class="flow-sub" x="256" y="634">end-to-end encrypted transport</text>
+    <line x1="440" y1="630" x2="470" y2="630" stroke="var(--accent)" stroke-width="2.5" stroke-dasharray="6 5"/>
+    <text class="flow-sub" x="476" y="634">optional LAN path</text>
+    <line x1="590" y1="630" x2="620" y2="630" stroke="var(--accent4)" stroke-width="2.5" stroke-dasharray="6 5"/>
+    <text class="flow-sub" x="626" y="634">push notifications</text>
+  </g>
+</svg>

@@ -1,0 +1,31 @@
+# Go
+*.exe
+*.test
+*.out
+bin/
+dist/
+
+# Databases / local state
+*.db
+*.db-wal
+*.db-shm
+.wingman/
+
+# macOS
+.DS_Store
+
+# Xcode / iOS
+ios/**/xcuserdata/
+ios/**/*.xcworkspace/xcuserdata/
+ios/**/DerivedData/
+*.ipa
+*.dSYM.zip
+
+# Editor
+.vscode/
+.idea/
+
+# Secrets
+*.p8
+*.pem
+keys/
