@@ -136,6 +136,7 @@ public struct PairingPayload: Codable, Sendable {
     public var relay: String?
     public var room: String
     public var token: String
+    public var relayToken: String?
 }
 
 // MARK: - JSONValue

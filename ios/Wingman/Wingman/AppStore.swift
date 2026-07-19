@@ -11,6 +11,7 @@ struct PairingConfig: Codable {
     var relay: String?
     var room: String
     var deviceName: String
+    var relayToken: String?
 
     var key: Curve25519.KeyAgreement.PrivateKey? {
         try? Curve25519.KeyAgreement.PrivateKey(rawRepresentation: privateKey)
@@ -69,7 +70,8 @@ final class AppStore: ObservableObject {
                 lan: payload.lan,
                 relay: payload.relay,
                 room: payload.room,
-                deviceName: deviceName
+                deviceName: deviceName,
+                relayToken: payload.relayToken
             )
 
             let (client, via) = try await dial(config: newConfig, key: key)
@@ -137,7 +139,7 @@ final class AppStore: ObservableObject {
         }
         let client = WingmanClient()
         try await client.connect(
-            route: .relay(url: relay, room: config.room),
+            route: .relay(url: relay, room: config.room, token: config.relayToken),
             staticKey: key,
             daemonPublicKey: config.daemonPub
         )

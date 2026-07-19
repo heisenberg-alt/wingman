@@ -168,6 +168,8 @@ type Payload struct {
 	Relay string `json:"relay,omitempty"` // relay base URL, e.g. wss://relay.example.com
 	Room  string `json:"room"`            // relay rendezvous id
 	Token string `json:"token"`           // single-use pairing token
+	// RelayToken authenticates connections to the relay itself (bearer).
+	RelayToken string `json:"relayToken,omitempty"`
 }
 
 // Room derives the stable relay rendezvous id from the daemon public key.

@@ -92,6 +92,28 @@ traffic over both paths, and single-use token replay rejection.
 
 The phone and daemon exchange JSON messages over a WebSocket, defined in [docs/PROTOCOL.md](docs/PROTOCOL.md). Every session event carries a monotonic sequence number; clients resume after a disconnect by replaying from their last acknowledged sequence. Permission requests block the CLI until answered and fail safe to deny.
 
+## Public relay
+
+To use Wingman away from your LAN, host the relay on a public HTTPS address.
+The relay stays zero-knowledge: it routes ciphertext by room id and
+authenticates connections with a bearer token that travels inside the pairing
+QR code.
+
+```sh
+# One-command deploy to Fly.io (needs flyctl + fly auth login)
+scripts/deploy-relay.sh
+
+# Point the daemon at it (printed by the deploy script)
+wingmand serve --external :7421 --relay wss://<app>.fly.dev --relay-token <token>
+
+# Re-pair the phone so it learns the relay
+wingmand pair
+```
+
+Any host works: the relay is a single static binary (see [relay/Dockerfile](relay/Dockerfile))
+that reads `RELAY_TOKEN` and `RELAY_LISTEN` from the environment. Hardening
+included: token auth, keepalive pings, per-IP rate limiting, and a room cap.
+
 ## Roadmap
 
 | Phase | Scope | Status |

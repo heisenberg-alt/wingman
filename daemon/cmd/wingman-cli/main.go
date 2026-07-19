@@ -61,12 +61,13 @@ plaintext loopback listener at --addr is used.`)
 
 // config is the client's persisted identity and daemon contact info.
 type config struct {
-	Private   []byte `json:"private"`
-	Public    []byte `json:"public"`
-	DaemonPub []byte `json:"daemonPub"`
-	Lan       string `json:"lan,omitempty"`
-	Relay     string `json:"relay,omitempty"`
-	Room      string `json:"room"`
+	Private    []byte `json:"private"`
+	Public     []byte `json:"public"`
+	DaemonPub  []byte `json:"daemonPub"`
+	Lan        string `json:"lan,omitempty"`
+	Relay      string `json:"relay,omitempty"`
+	Room       string `json:"room"`
+	RelayToken string `json:"relayToken,omitempty"`
 }
 
 func configPath() string {
@@ -162,7 +163,11 @@ func dialSecure(ctx context.Context, cfg *config, via string) (securechan.Messag
 		if cfg.Relay == "" {
 			return nil, fmt.Errorf("no relay URL in pairing config")
 		}
-		raw, err = dialWS(ctx, cfg.Relay+"/v1/join?room="+url.QueryEscape(cfg.Room))
+		joinURL := cfg.Relay + "/v1/join?room=" + url.QueryEscape(cfg.Room)
+		if cfg.RelayToken != "" {
+			joinURL += "&token=" + url.QueryEscape(cfg.RelayToken)
+		}
+		raw, err = dialWS(ctx, joinURL)
 	default:
 		return nil, fmt.Errorf("unknown --via %q (want lan or relay)", via)
 	}
@@ -253,12 +258,13 @@ func cmdPair(args []string) {
 	key, err := securechan.GenerateKey()
 	fatalIf(err)
 	cfg := &config{
-		Private:   key.Private,
-		Public:    key.Public,
-		DaemonPub: payload.Pub,
-		Lan:       payload.Lan,
-		Relay:     payload.Relay,
-		Room:      payload.Room,
+		Private:    key.Private,
+		Public:     key.Public,
+		DaemonPub:  payload.Pub,
+		Lan:        payload.Lan,
+		Relay:      payload.Relay,
+		Room:       payload.Room,
+		RelayToken: payload.RelayToken,
 	}
 
 	ctx := context.Background()

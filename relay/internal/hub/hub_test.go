@@ -14,7 +14,15 @@ import (
 
 func newHubServer(t *testing.T) *httptest.Server {
 	t.Helper()
-	h := New(slog.New(slog.NewTextHandler(io.Discard, nil)))
+	return newHubServerWith(t, Config{})
+}
+
+func newHubServerWith(t *testing.T, cfg Config) *httptest.Server {
+	t.Helper()
+	if cfg.PerIPPerMinute == 0 {
+		cfg.PerIPPerMinute = 10000 // don't rate-limit tests
+	}
+	h := New(slog.New(slog.NewTextHandler(io.Discard, nil)), cfg)
 	hts := httptest.NewServer(h.Handler())
 	t.Cleanup(hts.Close)
 	return hts
@@ -79,6 +87,58 @@ func TestMissingRoomParamRejected(t *testing.T) {
 		if _, _, err := websocket.Dial(context.Background(), url, nil); err == nil {
 			t.Errorf("%s without room succeeded", path)
 		}
+	}
+}
+
+func TestTokenAuth(t *testing.T) {
+	hts := newHubServerWith(t, Config{Token: "sekrit"})
+	base := "ws" + strings.TrimPrefix(hts.URL, "http")
+
+	// Without or with a wrong token: rejected.
+	for _, url := range []string{
+		base + "/v1/host?room=r9",
+		base + "/v1/host?room=r9&token=wrong",
+		base + "/v1/join?room=r9&token=wrong",
+	} {
+		if _, _, err := websocket.Dial(context.Background(), url, nil); err == nil {
+			t.Errorf("dial without valid token succeeded: %s", url)
+		}
+	}
+
+	// With the token: host connects and a client can join.
+	host, _, err := websocket.Dial(context.Background(), base+"/v1/host?room=r9&token=sekrit", nil)
+	if err != nil {
+		t.Fatalf("host with token: %v", err)
+	}
+	client, _, err := websocket.Dial(context.Background(), base+"/v1/join?room=r9&token=sekrit", nil)
+	if err != nil {
+		t.Fatalf("join with token: %v", err)
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := client.Write(ctx, websocket.MessageBinary, []byte("hi")); err != nil {
+		t.Fatal(err)
+	}
+	if _, data, err := host.Read(ctx); err != nil || string(data) != "hi" {
+		t.Fatalf("piped data = %q, %v", data, err)
+	}
+}
+
+func TestRateLimiterBlocksFloods(t *testing.T) {
+	hts := newHubServerWith(t, Config{PerIPPerMinute: 3})
+	base := "ws" + strings.TrimPrefix(hts.URL, "http")
+
+	blocked := false
+	for i := 0; i < 10; i++ {
+		conn, _, err := websocket.Dial(context.Background(), base+"/v1/host?room=flood", nil)
+		if err != nil {
+			blocked = true
+			break
+		}
+		_ = conn.Close(websocket.StatusNormalClosure, "")
+	}
+	if !blocked {
+		t.Error("10 rapid connections were never rate limited at 3/min")
 	}
 }
 

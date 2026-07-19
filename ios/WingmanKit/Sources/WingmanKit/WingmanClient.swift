@@ -23,16 +23,20 @@ public enum ClientError: Error, LocalizedError {
 /// How to reach the daemon.
 public enum Route: Sendable {
     case lan(String)               // host:port of the external listener
-    case relay(url: String, room: String)
+    case relay(url: String, room: String, token: String?)
 
     var webSocketURL: URL? {
         switch self {
         case .lan(let address):
             return URL(string: "ws://\(address)/ws")
-        case .relay(let url, let room):
+        case .relay(let url, let room, let token):
             var components = URLComponents(string: url)
             components?.path = "/v1/join"
-            components?.queryItems = [URLQueryItem(name: "room", value: room)]
+            var items = [URLQueryItem(name: "room", value: room)]
+            if let token, !token.isEmpty {
+                items.append(URLQueryItem(name: "token", value: token))
+            }
+            components?.queryItems = items
             return components?.url
         }
     }

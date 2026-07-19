@@ -100,11 +100,17 @@ func (ss *SecureServer) pair(ctx context.Context, sc *securechan.Conn) bool {
 }
 
 // RunRelayHost maintains the daemon's connection to the relay, serving one
-// secured peer connection at a time. It reconnects immediately after serving
+// secured peer connection at a time. relayToken, when set, authenticates the
+// connection to the relay itself. It reconnects immediately after serving
 // a real peer (normal operations are often sub-second), and backs off only on
 // dial failures or connections that never complete a handshake, so a
 // misbehaving relay cannot induce a hot loop.
-func RunRelayHost(ctx context.Context, relayURL, room string, ss *SecureServer) {
+func RunRelayHost(ctx context.Context, relayURL, room, relayToken string, ss *SecureServer) {
+	hostURL := relayURL + "/v1/host?room=" + url.QueryEscape(room)
+	if relayToken != "" {
+		hostURL += "&token=" + url.QueryEscape(relayToken)
+	}
+
 	backoff := time.Second
 	wait := func() bool {
 		select {
@@ -119,7 +125,7 @@ func RunRelayHost(ctx context.Context, relayURL, room string, ss *SecureServer) 
 	}
 
 	for ctx.Err() == nil {
-		ws, _, err := websocket.Dial(ctx, relayURL+"/v1/host?room="+url.QueryEscape(room), nil)
+		ws, _, err := websocket.Dial(ctx, hostURL, nil)
 		if err != nil {
 			ss.Logger.Warn("relay dial failed", "err", err, "retry_in", backoff)
 			if !wait() {

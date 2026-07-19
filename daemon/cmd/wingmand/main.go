@@ -73,6 +73,7 @@ func cmdServe(args []string) {
 	listen := fs.String("listen", "127.0.0.1:7420", "loopback listener (protocol + admin)")
 	external := fs.String("external", "", "external Noise-secured listener, e.g. :7421 (disabled if empty)")
 	relayURL := fs.String("relay", "", "relay base URL, e.g. wss://relay.example.com (disabled if empty)")
+	relayToken := fs.String("relay-token", os.Getenv("WINGMAN_RELAY_TOKEN"), "bearer token for the relay (if it requires auth)")
 	home := fs.String("home", defaultHome(), "state directory for keys and paired devices")
 	copilotPath := fs.String("copilot", "copilot", "path to the copilot binary")
 	permTimeout := fs.Duration("perm-timeout", 5*time.Minute, "fail-safe deny timeout for permission requests")
@@ -117,11 +118,12 @@ func cmdServe(args []string) {
 	adminMux.Handle("/", srv.Handler())
 	adminMux.HandleFunc("POST /pair", func(w http.ResponseWriter, r *http.Request) {
 		payload := pairing.Payload{
-			V:     1,
-			Pub:   static.Public,
-			Relay: *relayURL,
-			Room:  room,
-			Token: tokens.Issue(10 * time.Minute),
+			V:          1,
+			Pub:        static.Public,
+			Relay:      *relayURL,
+			Room:       room,
+			Token:      tokens.Issue(10 * time.Minute),
+			RelayToken: *relayToken,
 		}
 		if *external != "" {
 			payload.Lan = lanAddr(*external)
@@ -146,7 +148,7 @@ func cmdServe(args []string) {
 
 	// Relay host connection.
 	if *relayURL != "" {
-		go transport.RunRelayHost(ctx, *relayURL, room, secure)
+		go transport.RunRelayHost(ctx, *relayURL, room, *relayToken, secure)
 	}
 
 	logger.Info("wingmand listening", "addr", *listen, "version", version,
