@@ -31,3 +31,10 @@ ios/**/.swiftpm/
 *.p8
 *.pem
 keys/
+
+# Pairing artifacts — never commit payloads or QR codes
+wingman-payload*
+*wingman-qr*
+devices.json
+nohup.out
+*.log

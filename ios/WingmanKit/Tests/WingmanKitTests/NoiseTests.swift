@@ -88,12 +88,13 @@ import Testing
     }
 
     @Test func decodesGoPairingPayload() throws {
-        // As produced by `wingmand pair --json` (pub is base64-encoded []byte).
-        let json = #"{"v":1,"pub":"QUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUFBQUE=","lan":"10.0.0.5:7421","relay":"ws://r.example:8443","room":"AAAAAAAAAAAAAAAA","token":"abc123"}"#
+        // Shape produced by `wingmand pair --json`; values are synthetic.
+        let syntheticKey = Data(repeating: 0x41, count: 32).base64EncodedString()
+        let json = #"{"v":1,"pub":"\#(syntheticKey)","lan":"192.0.2.10:7421","relay":"ws://relay.example:8443","room":"AAAAAAAAAAAAAAAA","token":"0000000000000000"}"#
         let payload = try JSONDecoder.wingman.decode(PairingPayload.self, from: Data(json.utf8))
         #expect(payload.pub.count == 32)
         #expect(payload.room == "AAAAAAAAAAAAAAAA")
-        #expect(payload.lan == "10.0.0.5:7421")
+        #expect(payload.lan == "192.0.2.10:7421")
     }
 
     @Test func permissionRequestDecoding() throws {
