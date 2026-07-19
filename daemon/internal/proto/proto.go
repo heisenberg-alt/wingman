@@ -134,3 +134,20 @@ func Marshal(v any) json.RawMessage {
 	data, _ := json.Marshal(v)
 	return data
 }
+
+// ResultEnvelope builds the marshaled "res" reply for a command id.
+func ResultEnvelope(id string, data any, err error) []byte {
+	res := Result{OK: err == nil}
+	if err != nil {
+		res.Error = err.Error()
+	} else if data != nil {
+		res.Data = Marshal(data)
+	}
+	out, _ := json.Marshal(Envelope{
+		V:       Version,
+		ID:      id,
+		Type:    TypeRes,
+		Payload: Marshal(res),
+	})
+	return out
+}

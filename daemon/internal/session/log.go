@@ -29,10 +29,14 @@ func NewLog() *Log {
 }
 
 // Append adds an event, assigns its seq, and fans it out to subscribers.
+// Fanout happens under the lock with non-blocking sends, guaranteeing that
+// live delivery order matches seq order; slow subscribers drop events and
+// recover via replay.
 func (l *Log) Append(evtType string, payload any) Event {
 	data, _ := json.Marshal(payload)
 
 	l.mu.Lock()
+	defer l.mu.Unlock()
 	evt := Event{
 		Seq:     uint64(len(l.events)) + 1,
 		Type:    evtType,
@@ -40,13 +44,7 @@ func (l *Log) Append(evtType string, payload any) Event {
 		Time:    time.Now().UTC(),
 	}
 	l.events = append(l.events, evt)
-	subs := make([]chan Event, 0, len(l.subs))
 	for _, ch := range l.subs {
-		subs = append(subs, ch)
-	}
-	l.mu.Unlock()
-
-	for _, ch := range subs {
 		select {
 		case ch <- evt:
 		default: // slow subscriber: drop; they recover via replay

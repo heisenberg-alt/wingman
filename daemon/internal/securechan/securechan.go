@@ -12,6 +12,7 @@ import (
 	"context"
 	"crypto/rand"
 	"fmt"
+	"sync"
 
 	"github.com/flynn/noise"
 )
@@ -33,11 +34,17 @@ func GenerateKey() (noise.DHKey, error) {
 }
 
 // Conn is an encrypted MessageConn produced by a completed handshake.
+// Encryption and decryption are internally serialized: Noise cipher states
+// are stateful (nonce counters), and concurrent use would corrupt the stream.
 type Conn struct {
 	mc   MessageConn
-	enc  *noise.CipherState
-	dec  *noise.CipherState
 	peer []byte
+
+	encMu sync.Mutex
+	enc   *noise.CipherState
+
+	decMu sync.Mutex
+	dec   *noise.CipherState
 }
 
 // PeerStatic returns the remote party's static public key.
@@ -52,7 +59,9 @@ func (c *Conn) Read(ctx context.Context) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	c.decMu.Lock()
 	pt, err := c.dec.Decrypt(nil, nil, ct)
+	c.decMu.Unlock()
 	if err != nil {
 		return nil, fmt.Errorf("securechan: decrypt: %w", err)
 	}
@@ -61,7 +70,9 @@ func (c *Conn) Read(ctx context.Context) ([]byte, error) {
 
 // Write encrypts and sends one message.
 func (c *Conn) Write(ctx context.Context, data []byte) error {
+	c.encMu.Lock()
 	ct, err := c.enc.Encrypt(nil, nil, data)
+	c.encMu.Unlock()
 	if err != nil {
 		return fmt.Errorf("securechan: encrypt: %w", err)
 	}

@@ -10,6 +10,9 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
+	"slices"
 	"sync"
 	"time"
 
@@ -79,8 +82,20 @@ type pendingPermission struct {
 }
 
 // Create spawns a copilot ACP subprocess, performs the handshake, and opens a
-// session rooted at cwd.
+// session rooted at cwd. ctx bounds only the handshake; the subprocess itself
+// is tied to the daemon's lifetime so sessions survive client disconnects.
 func (m *Manager) Create(ctx context.Context, cwd string) (*Session, error) {
+	if !filepath.IsAbs(cwd) {
+		return nil, fmt.Errorf("cwd must be an absolute path")
+	}
+	info, err := os.Stat(cwd)
+	if err != nil {
+		return nil, fmt.Errorf("cwd: %w", err)
+	}
+	if !info.IsDir() {
+		return nil, fmt.Errorf("cwd %q is not a directory", cwd)
+	}
+
 	s := &Session{
 		ID:        newID(),
 		Cwd:       cwd,
@@ -91,7 +106,9 @@ func (m *Manager) Create(ctx context.Context, cwd string) (*Session, error) {
 		pending:   make(map[string]*pendingPermission),
 	}
 
-	client, err := acp.Spawn(ctx, acp.Options{
+	// Deliberately not ctx: the subprocess must outlive the creating
+	// connection. Shutdown is handled by Manager.CloseAll.
+	client, err := acp.Spawn(context.Background(), acp.Options{
 		Command:        m.cfg.CopilotPath,
 		Dir:            cwd,
 		OnNotification: s.onNotification,
@@ -148,11 +165,19 @@ func (m *Manager) Get(id string) (*Session, bool) {
 // List returns infos for all sessions, newest first.
 func (m *Manager) List() []proto.SessionInfo {
 	m.mu.Lock()
-	defer m.mu.Unlock()
-	out := make([]proto.SessionInfo, 0, len(m.sessions))
+	sessions := make([]*Session, 0, len(m.sessions))
 	for _, s := range m.sessions {
-		out = append(out, s.Info())
+		sessions = append(sessions, s)
 	}
+	m.mu.Unlock()
+
+	out := make([]proto.SessionInfo, len(sessions))
+	for i, s := range sessions {
+		out[i] = s.Info()
+	}
+	slices.SortFunc(out, func(a, b proto.SessionInfo) int {
+		return b.CreatedAt.Compare(a.CreatedAt)
+	})
 	return out
 }
 
@@ -173,16 +198,18 @@ func (s *Session) Info() proto.SessionInfo {
 }
 
 // SendPrompt runs one prompt turn asynchronously; progress and completion are
-// reported through the event log.
+// reported through the event log. The busy check and the transition to
+// running are atomic to prevent concurrent prompts racing past each other.
 func (s *Session) SendPrompt(text string) error {
 	s.mu.Lock()
 	if s.status == StatusRunning || s.status == StatusAwaitingPermission {
 		s.mu.Unlock()
 		return errors.New("session is busy; cancel first or wait for the turn to end")
 	}
+	s.status = StatusRunning
 	s.mu.Unlock()
+	s.Log.Append(proto.EvtSessionState, proto.SessionState{Status: StatusRunning})
 
-	s.setStatus(StatusRunning)
 	go func() {
 		res, err := s.client.Prompt(context.Background(), s.acpID, text)
 		if err != nil {

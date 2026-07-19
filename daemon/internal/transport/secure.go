@@ -80,17 +80,7 @@ func (ss *SecureServer) pair(ctx context.Context, sc *securechan.Conn) bool {
 	}
 
 	reply := func(err error) {
-		res := proto.Result{OK: err == nil}
-		if err != nil {
-			res.Error = err.Error()
-		}
-		out, _ := json.Marshal(proto.Envelope{
-			V:       proto.Version,
-			ID:      env.ID,
-			Type:    proto.TypeRes,
-			Payload: proto.Marshal(res),
-		})
-		_ = sc.Write(ctx, out)
+		_ = sc.Write(ctx, proto.ResultEnvelope(env.ID, nil, err))
 	}
 
 	if !ss.Tokens.Redeem(req.Token) {
@@ -107,26 +97,41 @@ func (ss *SecureServer) pair(ctx context.Context, sc *securechan.Conn) bool {
 }
 
 // RunRelayHost maintains the daemon's connection to the relay, serving one
-// secured peer connection at a time and reconnecting with backoff.
+// secured peer connection at a time and reconnecting with backoff. Short-lived
+// connections also back off, so a misbehaving relay cannot induce a hot loop.
 func RunRelayHost(ctx context.Context, relayURL, room string, ss *SecureServer) {
 	backoff := time.Second
+	wait := func() bool {
+		select {
+		case <-ctx.Done():
+			return false
+		case <-time.After(backoff):
+		}
+		if backoff < 30*time.Second {
+			backoff *= 2
+		}
+		return true
+	}
+
 	for ctx.Err() == nil {
 		ws, _, err := websocket.Dial(ctx, relayURL+"/v1/host?room="+url.QueryEscape(room), nil)
 		if err != nil {
 			ss.Logger.Warn("relay dial failed", "err", err, "retry_in", backoff)
-			select {
-			case <-ctx.Done():
+			if !wait() {
 				return
-			case <-time.After(backoff):
-			}
-			if backoff < 30*time.Second {
-				backoff *= 2
 			}
 			continue
 		}
-		backoff = time.Second
 		ss.Logger.Info("connected to relay", "url", relayURL, "room", room)
+
+		start := time.Now()
 		// Blocks until the peer disconnects or the relay drops us.
 		ss.ServeConn(ctx, wsconn.New(ws))
+
+		if time.Since(start) >= 2*time.Second {
+			backoff = time.Second
+		} else if !wait() {
+			return
+		}
 	}
 }

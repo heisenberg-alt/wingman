@@ -42,7 +42,9 @@ func (s *Server) Handler() http.Handler {
 }
 
 // ServeConn runs the protocol loop over mc until the connection closes. It
-// closes mc before returning.
+// closes mc before returning. Commands are dispatched on their own goroutines
+// so a slow operation (e.g. session.create spawning a subprocess) cannot
+// block permission approvals arriving on the same connection.
 func (s *Server) ServeConn(ctx context.Context, mc securechan.MessageConn) {
 	c := &client{
 		srv:     s,
@@ -59,7 +61,7 @@ func (s *Server) ServeConn(ctx context.Context, mc securechan.MessageConn) {
 		if err := json.Unmarshal(data, &env); err != nil {
 			continue
 		}
-		c.handle(ctx, env)
+		go c.handle(ctx, env)
 	}
 }
 
@@ -235,18 +237,7 @@ func (c *client) sendEvent(ctx context.Context, sessionID string, evt session.Ev
 }
 
 func (c *client) reply(ctx context.Context, cmd proto.Envelope, data any, err error) {
-	res := proto.Result{OK: err == nil}
-	if err != nil {
-		res.Error = err.Error()
-	} else if data != nil {
-		res.Data = proto.Marshal(data)
-	}
-	_ = c.send(ctx, proto.Envelope{
-		V:       proto.Version,
-		ID:      cmd.ID,
-		Type:    proto.TypeRes,
-		Payload: proto.Marshal(res),
-	})
+	_ = c.sendBytes(ctx, proto.ResultEnvelope(cmd.ID, data, err))
 }
 
 func (c *client) send(ctx context.Context, env proto.Envelope) error {
@@ -254,6 +245,10 @@ func (c *client) send(ctx context.Context, env proto.Envelope) error {
 	if err != nil {
 		return err
 	}
+	return c.sendBytes(ctx, data)
+}
+
+func (c *client) sendBytes(ctx context.Context, data []byte) error {
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
 	return c.mc.Write(ctx, data)
