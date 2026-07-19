@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#171a3d"/>
+      <stop offset="0.55" stop-color="#31308f"/>
+      <stop offset="1" stop-color="#5b54e8"/>
+    </linearGradient>
+    <linearGradient id="wing" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="1" stop-color="#c9d4ff"/>
+    </linearGradient>
+  </defs>
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+
+  <!-- subtle radial glow -->
+  <circle cx="512" cy="460" r="360" fill="#ffffff" opacity="0.06"/>
+
+  <!-- wing: three swept feathers -->
+  <g fill="url(#wing)" transform="translate(512 512) rotate(-24)">
+    <rect x="-300" y="-150" width="600" height="96" rx="48"/>
+    <rect x="-220" y="-24"  width="440" height="96" rx="48" opacity="0.88"/>
+    <rect x="-140" y="102"  width="280" height="96" rx="48" opacity="0.74"/>
+  </g>
+
+  <!-- terminal prompt accent -->
+  <g fill="none" stroke="#9ee6b8" stroke-width="34" stroke-linecap="round" stroke-linejoin="round">
+    <path d="M 700 742 L 760 800 L 700 858"/>
+  </g>
+</svg>

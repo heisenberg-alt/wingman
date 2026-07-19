@@ -11,58 +11,100 @@ struct PairingView: View {
 
     var body: some View {
         NavigationStack {
-            VStack(spacing: 24) {
-                Spacer()
+            ZStack {
+                LinearGradient(
+                    colors: [Color(red: 0.09, green: 0.10, blue: 0.24), Color(red: 0.36, green: 0.33, blue: 0.91)],
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                )
+                .ignoresSafeArea()
 
-                Image(systemName: "airplane.circle.fill")
-                    .font(.system(size: 72))
-                    .foregroundStyle(.tint)
-                Text("Wingman")
-                    .font(.largeTitle.bold())
-                Text("Pair with your dev machine:\nrun `wingmand pair` and scan the QR code.")
-                    .font(.callout)
-                    .foregroundStyle(.secondary)
-                    .multilineTextAlignment(.center)
+                VStack(spacing: 0) {
+                    Spacer()
 
-                Spacer()
-
-                TextField("Device name", text: $deviceName)
-                    .textFieldStyle(.roundedBorder)
-
-                Button {
-                    showScanner = true
-                } label: {
-                    Label("Scan QR code", systemImage: "qrcode.viewfinder")
-                        .frame(maxWidth: .infinity)
-                }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.large)
-
-                DisclosureGroup("Paste payload instead") {
-                    TextField("Pairing payload JSON", text: $pastedPayload, axis: .vertical)
-                        .textFieldStyle(.roundedBorder)
-                        .font(.footnote.monospaced())
-                        .lineLimit(3...6)
-                    Button("Pair") {
-                        pair(with: pastedPayload)
+                    // Wing mark, echoing the app icon.
+                    VStack(alignment: .leading, spacing: 9) {
+                        Capsule().fill(.white).frame(width: 120, height: 18)
+                        Capsule().fill(.white.opacity(0.85)).frame(width: 88, height: 18)
+                        Capsule().fill(.white.opacity(0.7)).frame(width: 56, height: 18)
                     }
-                    .buttonStyle(.bordered)
-                    .disabled(pastedPayload.isEmpty || isPairing)
+                    .rotationEffect(.degrees(-8))
+
+                    Text("Wingman")
+                        .font(.system(size: 40, weight: .bold, design: .rounded))
+                        .foregroundStyle(.white)
+                        .padding(.top, 26)
+
+                    Text("Your seat beside Copilot,\nwherever you are.")
+                        .font(.callout)
+                        .foregroundStyle(.white.opacity(0.75))
+                        .multilineTextAlignment(.center)
+                        .padding(.top, 6)
+
+                    Spacer()
+
+                    VStack(spacing: 14) {
+                        Text("Run `wingmand pair` on your dev machine, then scan the QR code.")
+                            .font(.footnote)
+                            .foregroundStyle(.white.opacity(0.7))
+                            .multilineTextAlignment(.center)
+
+                        TextField("Device name", text: $deviceName)
+                            .textFieldStyle(.plain)
+                            .padding(12)
+                            .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 12))
+                            .foregroundStyle(.white)
+
+                        Button {
+                            showScanner = true
+                        } label: {
+                            Label("Scan QR code", systemImage: "qrcode.viewfinder")
+                                .font(.headline)
+                                .frame(maxWidth: .infinity)
+                                .padding(.vertical, 6)
+                        }
+                        .buttonStyle(.borderedProminent)
+                        .buttonBorderShape(.capsule)
+                        .tint(.white)
+                        .foregroundStyle(Color(red: 0.2, green: 0.19, blue: 0.6))
+
+                        DisclosureGroup {
+                            TextField("Pairing payload JSON", text: $pastedPayload, axis: .vertical)
+                                .textFieldStyle(.plain)
+                                .font(.footnote.monospaced())
+                                .lineLimit(3...6)
+                                .padding(10)
+                                .background(.white.opacity(0.12), in: RoundedRectangle(cornerRadius: 10))
+                                .foregroundStyle(.white)
+                            Button("Pair with payload") {
+                                pair(with: pastedPayload)
+                            }
+                            .font(.callout.bold())
+                            .foregroundStyle(.white)
+                            .padding(.top, 8)
+                            .disabled(pastedPayload.isEmpty || isPairing)
+                        } label: {
+                            Text("Paste payload instead")
+                                .font(.footnote)
+                                .foregroundStyle(.white.opacity(0.7))
+                        }
+                        .tint(.white.opacity(0.7))
+                    }
+                    .padding(24)
                 }
-                .font(.callout)
             }
-            .padding(24)
             .sheet(isPresented: $showScanner) {
                 QRScannerView { code in
                     showScanner = false
                     pair(with: code)
                 }
+                .ignoresSafeArea()
             }
             .overlay {
                 if isPairing {
                     ProgressView("Pairing…")
                         .padding(24)
-                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 12))
+                        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
                 }
             }
         }

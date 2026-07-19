@@ -8,19 +8,11 @@ struct SessionListView: View {
 
     var body: some View {
         NavigationStack {
-            List {
+            Group {
                 if store.sessions.isEmpty {
-                    ContentUnavailableView(
-                        "No sessions",
-                        systemImage: "terminal",
-                        description: Text("Start one with the + button or from your terminal.")
-                    )
+                    emptyState
                 } else {
-                    ForEach(store.sessions) { session in
-                        NavigationLink(value: session.id) {
-                            SessionRow(session: session, hasPendingPermission: store.pendingPermissions[session.id] != nil)
-                        }
-                    }
+                    sessionList
                 }
             }
             .navigationTitle("Wingman")
@@ -32,13 +24,6 @@ struct SessionListView: View {
                     ConnectionBadge(state: store.connection)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Button {
-                        showNewSession = true
-                    } label: {
-                        Image(systemName: "plus")
-                    }
-                }
-                ToolbarItem(placement: .topBarTrailing) {
                     Menu {
                         Button("Unpair device", role: .destructive) { store.unpair() }
                     } label: {
@@ -46,63 +31,160 @@ struct SessionListView: View {
                     }
                 }
             }
+            .safeAreaInset(edge: .bottom) {
+                newSessionButton
+            }
             .refreshable { await store.refreshSessions() }
             .sheet(isPresented: $showNewSession) {
                 NewSessionView()
+                    .presentationDetents([.medium])
+            }
+            .sensoryFeedback(.warning, trigger: store.pendingPermissions.count) { old, new in
+                new > old // buzz when a new approval arrives
             }
         }
     }
+
+    private var sessionList: some View {
+        ScrollView {
+            LazyVStack(spacing: 12) {
+                ForEach(store.sessions) { session in
+                    NavigationLink(value: session.id) {
+                        SessionCard(
+                            session: session,
+                            hasPendingPermission: store.pendingPermissions[session.id] != nil
+                        )
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(.horizontal)
+            .padding(.top, 4)
+        }
+        .background(Color(.systemGroupedBackground))
+        .animation(.snappy, value: store.sessions)
+    }
+
+    private var emptyState: some View {
+        ContentUnavailableView {
+            Label("No sessions", systemImage: "terminal")
+        } description: {
+            Text("Start one below, or run `copilot` on your machine.")
+        }
+    }
+
+    private var newSessionButton: some View {
+        Button {
+            showNewSession = true
+        } label: {
+            Label("New session", systemImage: "plus")
+                .font(.headline)
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 6)
+        }
+        .buttonStyle(.borderedProminent)
+        .buttonBorderShape(.capsule)
+        .padding(.horizontal)
+        .padding(.bottom, 8)
+        .background(.ultraThinMaterial.opacity(store.sessions.isEmpty ? 0 : 1))
+    }
 }
 
-struct SessionRow: View {
+/// One session, rendered as a card.
+struct SessionCard: View {
     let session: SessionInfo
     let hasPendingPermission: Bool
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: 14) {
             StatusDot(status: session.status)
-            VStack(alignment: .leading, spacing: 2) {
+                .frame(width: 14, height: 14)
+
+            VStack(alignment: .leading, spacing: 3) {
                 Text(directoryName)
                     .font(.headline)
-                Text(session.status.replacingOccurrences(of: "_", with: " "))
-                    .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+                Text(session.cwd)
+                    .font(.caption.monospaced())
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+                    .truncationMode(.head)
             }
-            Spacer()
-            if hasPendingPermission {
-                Image(systemName: "exclamationmark.shield.fill")
-                    .foregroundStyle(.orange)
+
+            Spacer(minLength: 8)
+
+            VStack(alignment: .trailing, spacing: 4) {
+                if hasPendingPermission {
+                    Label("Approve", systemImage: "exclamationmark.shield.fill")
+                        .font(.caption2.bold())
+                        .foregroundStyle(.white)
+                        .padding(.horizontal, 8)
+                        .padding(.vertical, 3)
+                        .background(.orange, in: Capsule())
+                } else {
+                    Text(statusLabel)
+                        .font(.caption2.smallCaps())
+                        .foregroundStyle(statusColor(session.status))
+                }
+                Text(session.createdAt, format: .relative(presentation: .named))
+                    .font(.caption2)
+                    .foregroundStyle(.tertiary)
             }
-            Text(session.createdAt.formatted(date: .omitted, time: .shortened))
-                .font(.caption2)
-                .foregroundStyle(.tertiary)
         }
-        .padding(.vertical, 4)
+        .padding(14)
+        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+        .overlay {
+            if hasPendingPermission {
+                RoundedRectangle(cornerRadius: 16)
+                    .strokeBorder(.orange.opacity(0.5), lineWidth: 1.5)
+            }
+        }
     }
 
     private var directoryName: String {
         URL(fileURLWithPath: session.cwd).lastPathComponent
     }
+
+    private var statusLabel: String {
+        session.status.replacingOccurrences(of: "_", with: " ")
+    }
 }
 
+func statusColor(_ status: String) -> Color {
+    switch status {
+    case "running": return .blue
+    case "awaiting_permission": return .orange
+    case "idle": return .green
+    case "error": return .red
+    case "done": return .secondary
+    default: return .secondary
+    }
+}
+
+/// Status indicator that pulses while the session is active.
 struct StatusDot: View {
     let status: String
+    @State private var pulsing = false
 
-    var body: some View {
-        Circle()
-            .fill(color)
-            .frame(width: 10, height: 10)
+    private var isActive: Bool {
+        status == "running" || status == "awaiting_permission"
     }
 
-    private var color: Color {
-        switch status {
-        case "running": return .blue
-        case "awaiting_permission": return .orange
-        case "idle": return .green
-        case "error": return .red
-        case "done": return .gray
-        default: return .secondary.opacity(0.5)
+    var body: some View {
+        ZStack {
+            if isActive {
+                Circle()
+                    .fill(statusColor(status).opacity(0.35))
+                    .scaleEffect(pulsing ? 1.9 : 1.0)
+                    .opacity(pulsing ? 0 : 1)
+                    .animation(.easeOut(duration: 1.2).repeatForever(autoreverses: false), value: pulsing)
+            }
+            Circle()
+                .fill(statusColor(status))
+                .frame(width: 10, height: 10)
         }
+        .onAppear { pulsing = isActive }
+        .onChange(of: status) { _, _ in pulsing = isActive }
     }
 }
 
@@ -113,14 +195,20 @@ struct ConnectionBadge: View {
         switch state {
         case .connected(let via):
             Label(via, systemImage: "lock.fill")
-                .font(.caption2)
+                .font(.caption.bold())
                 .foregroundStyle(.green)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(.green.opacity(0.14), in: Capsule())
         case .connecting:
             ProgressView().controlSize(.small)
         case .disconnected:
-            Label("Offline", systemImage: "bolt.slash")
-                .font(.caption2)
+            Label("Offline", systemImage: "bolt.slash.fill")
+                .font(.caption.bold())
                 .foregroundStyle(.secondary)
+                .padding(.horizontal, 8)
+                .padding(.vertical, 3)
+                .background(.secondary.opacity(0.12), in: Capsule())
         }
     }
 }
@@ -136,11 +224,15 @@ struct NewSessionView: View {
     var body: some View {
         NavigationStack {
             Form {
-                Section("Working directory (absolute path on your machine)") {
+                Section {
                     TextField("/Users/you/projects/app", text: $cwd)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                         .font(.callout.monospaced())
+                } header: {
+                    Text("Working directory")
+                } footer: {
+                    Text("Absolute path on your paired machine.")
                 }
                 Section("Initial prompt (optional)") {
                     TextField("Fix the failing CI on branch main…", text: $prompt, axis: .vertical)
@@ -154,15 +246,19 @@ struct NewSessionView: View {
                     Button("Cancel") { dismiss() }
                 }
                 ToolbarItem(placement: .confirmationAction) {
-                    Button("Start") {
-                        isCreating = true
-                        Task {
-                            _ = await store.createSession(cwd: cwd, prompt: prompt)
-                            isCreating = false
-                            dismiss()
+                    if isCreating {
+                        ProgressView()
+                    } else {
+                        Button("Start") {
+                            isCreating = true
+                            Task {
+                                _ = await store.createSession(cwd: cwd, prompt: prompt)
+                                isCreating = false
+                                dismiss()
+                            }
                         }
+                        .disabled(cwd.isEmpty)
                     }
-                    .disabled(cwd.isEmpty || isCreating)
                 }
             }
         }
