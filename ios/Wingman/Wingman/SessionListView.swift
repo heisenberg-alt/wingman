@@ -94,6 +94,8 @@ struct SessionListView: View {
     private var sessionList: some View {
         ScrollView {
             LazyVStack(spacing: 12) {
+                summaryHeader
+
                 Picker("Filter", selection: $filter) {
                     ForEach(SessionFilter.allCases) { option in
                         Text(option.rawValue).tag(option)
@@ -113,7 +115,7 @@ struct SessionListView: View {
                             }
                         )
                     }
-                    .buttonStyle(.plain)
+                    .buttonStyle(PressableStyle())
                     .contextMenu {
                         if session.status == "done" || session.status == "error" {
                             Button("Remove session", systemImage: "trash", role: .destructive) {
@@ -130,12 +132,37 @@ struct SessionListView: View {
         .animation(.snappy, value: store.sessions)
     }
 
-    private var emptyState: some View {
-        ContentUnavailableView {
-            Label("No sessions", systemImage: "terminal")
-        } description: {
-            Text("Start one below, or run `copilot` on your machine.")
+    /// "3 sessions · 1 needs approval" with animated numerals.
+    private var summaryHeader: some View {
+        HStack(spacing: 4) {
+            Text("^[\(store.sessions.count) session](inflect: true)")
+                .contentTransition(.numericText())
+            if !store.pendingPermissions.isEmpty {
+                Text("·")
+                Text("^[\(store.pendingPermissions.count) approval](inflect: true) waiting")
+                    .foregroundStyle(.orange)
+                    .contentTransition(.numericText())
+            }
+            Spacer()
         }
+        .font(.subheadline.weight(.medium))
+        .foregroundStyle(.secondary)
+        .animation(.snappy, value: store.sessions.count)
+        .animation(.snappy, value: store.pendingPermissions.count)
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 18) {
+            WingMark(feather: 12, color: .secondary.opacity(0.5))
+            Text("No sessions yet")
+                .font(Brand.display(22))
+            Text("Start one below, or run `copilot` on your machine\nand it will appear here.")
+                .font(.callout)
+                .foregroundStyle(.secondary)
+                .multilineTextAlignment(.center)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(surfaces.canvas)
     }
 
     private var newSessionButton: some View {
@@ -231,6 +258,12 @@ struct SessionCard: View {
                     .strokeBorder(.orange.opacity(0.5), lineWidth: 1.5)
             }
         }
+        .shadow(
+            color: hasPendingPermission
+                ? .orange.opacity(0.25)
+                : statusColor(session.status).opacity(session.status == "running" ? 0.18 : 0.06),
+            radius: 10, y: 4
+        )
     }
 
     private var directoryName: String {

@@ -143,8 +143,15 @@ struct SessionDetailView: View {
                         .font(.body.bold())
                         .foregroundStyle(.white)
                         .frame(width: 34, height: 34)
-                        .background(canSend ? Color.accentColor : Color.secondary.opacity(0.4), in: Circle())
+                        .background {
+                            if canSend {
+                                Circle().fill(Brand.accentGradient)
+                            } else {
+                                Circle().fill(Color.secondary.opacity(0.4))
+                            }
+                        }
                 }
+                .buttonStyle(PressableStyle())
                 .disabled(!canSend)
                 .animation(.snappy, value: canSend)
             }
@@ -177,11 +184,14 @@ struct TranscriptRow: View {
     var body: some View {
         switch item.kind {
         case .message:
-            RichText(text: item.text)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(surfaces.card, in: RoundedRectangle(cornerRadius: 18))
-                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(alignment: .top, spacing: 10) {
+                CopilotAvatar()
+                RichText(text: item.text)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(surfaces.card, in: RoundedRectangle(cornerRadius: 18))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
         case .thought:
             HStack(alignment: .top, spacing: 6) {
@@ -216,11 +226,12 @@ struct TranscriptRow: View {
                 .frame(maxWidth: .infinity)
 
         case .turnEnded:
-            HStack {
+            HStack(spacing: 8) {
                 Rectangle().fill(.quaternary).frame(height: 1)
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.caption)
+                Label("Turn complete", systemImage: "checkmark.seal.fill")
+                    .font(.caption2.smallCaps())
                     .foregroundStyle(.green)
+                    .fixedSize()
                 Rectangle().fill(.quaternary).frame(height: 1)
             }
             .padding(.vertical, 2)
@@ -228,28 +239,51 @@ struct TranscriptRow: View {
     }
 }
 
-/// Three bouncing dots shown while the agent is working.
+/// Small gradient avatar marking Copilot's messages.
+struct CopilotAvatar: View {
+    var body: some View {
+        Image(systemName: "wind")
+            .font(.caption.bold())
+            .foregroundStyle(.white)
+            .frame(width: 26, height: 26)
+            .background(Brand.accentGradient, in: Circle())
+            .padding(.top, 2)
+    }
+}
+
+/// Copilot-is-working indicator: avatar plus shimmering label and dots.
 struct WorkingIndicator: View {
+    @Environment(\.surfaces) private var surfaces
     @State private var phase = false
 
     var body: some View {
-        HStack(spacing: 5) {
-            ForEach(0..<3) { index in
-                Circle()
-                    .fill(.secondary)
-                    .frame(width: 7, height: 7)
-                    .offset(y: phase ? -4 : 2)
-                    .animation(
-                        .easeInOut(duration: 0.5)
-                            .repeatForever(autoreverses: true)
-                            .delay(Double(index) * 0.15),
-                        value: phase
-                    )
+        HStack(spacing: 10) {
+            CopilotAvatar()
+            HStack(spacing: 8) {
+                Text("Copilot is working")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .opacity(phase ? 1.0 : 0.45)
+                    .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: phase)
+                HStack(spacing: 4) {
+                    ForEach(0..<3) { index in
+                        Circle()
+                            .fill(.secondary)
+                            .frame(width: 5, height: 5)
+                            .offset(y: phase ? -3 : 1)
+                            .animation(
+                                .easeInOut(duration: 0.5)
+                                    .repeatForever(autoreverses: true)
+                                    .delay(Double(index) * 0.15),
+                                value: phase
+                            )
+                    }
+                }
             }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(surfaces.card, in: RoundedRectangle(cornerRadius: 18))
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
         .onAppear { phase = true }
     }
 }
@@ -260,6 +294,7 @@ struct ApprovalSheet: View {
     let sessionID: String
     let request: PermissionRequest
     @State private var responding = false
+    @State private var appeared = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -270,15 +305,24 @@ struct ApprovalSheet: View {
 
             Spacer()
 
-            Image(systemName: "exclamationmark.shield.fill")
-                .font(.system(size: 40))
-                .foregroundStyle(.white)
-                .frame(width: 76, height: 76)
-                .background(.orange.gradient, in: RoundedRectangle(cornerRadius: 20))
+            ZStack {
+                Circle()
+                    .fill(.orange.opacity(0.18))
+                    .frame(width: 110, height: 110)
+                    .blur(radius: 12)
+                Image(systemName: "exclamationmark.shield.fill")
+                    .font(.system(size: 40))
+                    .foregroundStyle(.white)
+                    .frame(width: 76, height: 76)
+                    .background(.orange.gradient, in: RoundedRectangle(cornerRadius: 20))
+                    .symbolEffect(.bounce, value: appeared)
+                    .scaleEffect(appeared ? 1 : 0.7)
+                    .animation(.spring(duration: 0.45, bounce: 0.4), value: appeared)
+            }
 
             Text("Copilot requests permission")
-                .font(.title3.bold())
-                .padding(.top, 16)
+                .font(Brand.display(20))
+                .padding(.top, 12)
 
             Text(request.title ?? "Tool call")
                 .font(.callout.monospaced())
@@ -310,6 +354,7 @@ struct ApprovalSheet: View {
         }
         .padding(.horizontal, 24)
         .padding(.bottom, 16)
+        .onAppear { appeared = true }
         .sensoryFeedback(.success, trigger: responding) { _, new in new }
     }
 

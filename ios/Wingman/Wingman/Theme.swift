@@ -44,13 +44,52 @@ enum AppTheme: String, CaseIterable, Identifiable {
 enum Brand {
     static let indigoDeep = Color(red: 0.09, green: 0.10, blue: 0.24)
     static let indigo = Color(red: 0.36, green: 0.33, blue: 0.91)
+    static let violet = Color(red: 0.55, green: 0.45, blue: 1.0)
+
     static let heroGradient = LinearGradient(
         colors: [indigoDeep, indigo],
         startPoint: .topLeading,
         endPoint: .bottomTrailing
     )
 
+    /// Accent gradient for primary actions (send, approve).
+    static let accentGradient = LinearGradient(
+        colors: [indigo, violet],
+        startPoint: .topLeading,
+        endPoint: .bottomTrailing
+    )
+
     static let cardCornerRadius: CGFloat = 16
+
+    /// Rounded display typography for headers and hero moments.
+    static func display(_ size: CGFloat, weight: Font.Weight = .bold) -> Font {
+        .system(size: size, weight: weight, design: .rounded)
+    }
+}
+
+/// Scale-down press physics for cards and prominent buttons.
+struct PressableStyle: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .scaleEffect(configuration.isPressed ? 0.97 : 1)
+            .opacity(configuration.isPressed ? 0.9 : 1)
+            .animation(.snappy(duration: 0.2), value: configuration.isPressed)
+    }
+}
+
+/// The three-feather wing mark, reusable at any scale.
+struct WingMark: View {
+    var feather: CGFloat = 18
+    var color: Color = .white
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: feather / 2) {
+            Capsule().fill(color).frame(width: feather * 6.6, height: feather)
+            Capsule().fill(color.opacity(0.85)).frame(width: feather * 4.9, height: feather)
+            Capsule().fill(color.opacity(0.7)).frame(width: feather * 3.1, height: feather)
+        }
+        .rotationEffect(.degrees(-8))
+    }
 }
 
 /// Semantic surface colors that adapt to the selected theme.
