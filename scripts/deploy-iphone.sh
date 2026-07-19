@@ -13,7 +13,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-UDID=${1:-$(xcrun devicectl list devices 2>/dev/null | awk '/iPhone/ {print $(NF-2)}' | head -1)}
+UDID=${1:-$(xcrun devicectl list devices 2>/dev/null | grep -oE '[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}' | head -1)}
 [ -n "$UDID" ] || { echo "error: no iPhone found; is it plugged in and unlocked?" >&2; exit 1; }
 echo "device: $UDID"
 
