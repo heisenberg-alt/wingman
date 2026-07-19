@@ -37,7 +37,9 @@ type Config struct {
 	// PermissionTimeout is how long a permission request waits for the phone
 	// before failing safe to deny. Defaults to 5 minutes.
 	PermissionTimeout time.Duration
-	Logger            *slog.Logger
+	// StateDir, when set, persists recent working directories there.
+	StateDir string
+	Logger   *slog.Logger
 }
 
 // Manager owns all sessions in this daemon.
@@ -45,7 +47,10 @@ type Manager struct {
 	cfg      Config
 	mu       sync.Mutex
 	sessions map[string]*Session
+	recent   []string // most recent first, capped
 }
+
+const maxRecentDirs = 20
 
 // NewManager creates a Manager.
 func NewManager(cfg Config) *Manager {
@@ -58,7 +63,9 @@ func NewManager(cfg Config) *Manager {
 	if cfg.Logger == nil {
 		cfg.Logger = slog.Default()
 	}
-	return &Manager{cfg: cfg, sessions: make(map[string]*Session)}
+	m := &Manager{cfg: cfg, sessions: make(map[string]*Session)}
+	m.loadRecentDirs()
+	return m
 }
 
 // Session is one live Copilot ACP session.
@@ -149,6 +156,7 @@ func (m *Manager) Create(ctx context.Context, cwd string) (*Session, error) {
 	m.mu.Lock()
 	m.sessions[s.ID] = s
 	m.mu.Unlock()
+	m.rememberDir(cwd)
 
 	m.cfg.Logger.Info("session created", "id", s.ID, "cwd", cwd)
 	return s, nil
@@ -187,6 +195,72 @@ func (m *Manager) CloseAll() {
 	defer m.mu.Unlock()
 	for _, s := range m.sessions {
 		_ = s.client.Close()
+	}
+}
+
+// Remove deletes a session that has reached a terminal state (done or
+// error), releasing its subprocess.
+func (m *Manager) Remove(id string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	s, ok := m.sessions[id]
+	if !ok {
+		return fmt.Errorf("unknown session %q", id)
+	}
+	if st := s.Info().Status; st != StatusDone && st != StatusError {
+		return fmt.Errorf("session is %s; only done or error sessions can be removed", st)
+	}
+	_ = s.client.Close()
+	delete(m.sessions, id)
+	m.cfg.Logger.Info("session removed", "id", id)
+	return nil
+}
+
+// RecentDirs returns recently used working directories, most recent first.
+func (m *Manager) RecentDirs() []string {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	out := make([]string, len(m.recent))
+	copy(out, m.recent)
+	return out
+}
+
+func (m *Manager) recentDirsPath() string {
+	if m.cfg.StateDir == "" {
+		return ""
+	}
+	return filepath.Join(m.cfg.StateDir, "recent-dirs.json")
+}
+
+func (m *Manager) loadRecentDirs() {
+	path := m.recentDirsPath()
+	if path == "" {
+		return
+	}
+	data, err := os.ReadFile(path)
+	if err != nil {
+		return
+	}
+	_ = json.Unmarshal(data, &m.recent)
+}
+
+// rememberDir moves cwd to the front of the recents list and persists it.
+func (m *Manager) rememberDir(cwd string) {
+	m.mu.Lock()
+	next := make([]string, 0, maxRecentDirs)
+	next = append(next, cwd)
+	for _, dir := range m.recent {
+		if dir != cwd && len(next) < maxRecentDirs {
+			next = append(next, dir)
+		}
+	}
+	m.recent = next
+	path := m.recentDirsPath()
+	data, _ := json.Marshal(m.recent)
+	m.mu.Unlock()
+
+	if path != "" {
+		_ = os.WriteFile(path, data, 0o600)
 	}
 }
 

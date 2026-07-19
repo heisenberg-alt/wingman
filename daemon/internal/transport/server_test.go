@@ -216,3 +216,32 @@ func TestCommandsForUnknownSessionFail(t *testing.T) {
 		t.Errorf("res = %+v, want unknown session error", res)
 	}
 }
+
+func TestDirsListAndSessionRemove(t *testing.T) {
+	_, hts := newServer(t)
+	c := dial(t, hts)
+
+	cwd := t.TempDir()
+	res := c.call(proto.CmdSessionCreate, "", proto.SessionCreate{Cwd: cwd})
+	if !res.OK {
+		t.Fatalf("create: %s", res.Error)
+	}
+	var info proto.SessionInfo
+	_ = json.Unmarshal(res.Data, &info)
+
+	// dirs.list surfaces the cwd, most recent first.
+	res = c.call(proto.CmdDirsList, "", nil)
+	if !res.OK {
+		t.Fatalf("dirs.list: %s", res.Error)
+	}
+	var dirs proto.DirsList
+	_ = json.Unmarshal(res.Data, &dirs)
+	if len(dirs.Dirs) == 0 || dirs.Dirs[0] != cwd {
+		t.Errorf("dirs = %v, want %q first", dirs.Dirs, cwd)
+	}
+
+	// Removing a live session is rejected.
+	if res := c.call(proto.CmdSessionRemove, info.ID, nil); res.OK {
+		t.Error("removed a non-terminal session")
+	}
+}

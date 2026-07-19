@@ -96,6 +96,7 @@ func cmdServe(args []string) {
 	mgr := session.NewManager(session.Config{
 		CopilotPath:       *copilotPath,
 		PermissionTimeout: *permTimeout,
+		StateDir:          *home,
 		Logger:            logger,
 	})
 	defer mgr.CloseAll()

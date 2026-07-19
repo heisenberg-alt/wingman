@@ -1,6 +1,25 @@
 import SwiftUI
 import WingmanKit
 
+/// Dashboard filter.
+enum SessionFilter: String, CaseIterable, Identifiable {
+    case all = "All"
+    case active = "Active"
+    case approvals = "Approvals"
+    case finished = "Finished"
+
+    var id: String { rawValue }
+
+    func matches(_ session: SessionInfo, pending: Bool) -> Bool {
+        switch self {
+        case .all: return true
+        case .active: return session.status == "running" || session.status == "awaiting_permission" || session.status == "idle"
+        case .approvals: return pending
+        case .finished: return session.status == "done" || session.status == "error"
+        }
+    }
+}
+
 /// Dashboard: all sessions on the paired machine, with live status.
 struct SessionListView: View {
     @EnvironmentObject private var store: AppStore
@@ -8,6 +27,13 @@ struct SessionListView: View {
     @State private var showNewSession = false
     @State private var showSettings = false
     @State private var path = NavigationPath()
+    @State private var filter: SessionFilter = .all
+
+    private var filteredSessions: [SessionInfo] {
+        store.sessions.filter {
+            filter.matches($0, pending: store.pendingPermissions[$0.id] != nil)
+        }
+    }
 
     var body: some View {
         NavigationStack(path: $path) {
@@ -68,17 +94,33 @@ struct SessionListView: View {
     private var sessionList: some View {
         ScrollView {
             LazyVStack(spacing: 12) {
-                ForEach(store.sessions) { session in
+                Picker("Filter", selection: $filter) {
+                    ForEach(SessionFilter.allCases) { option in
+                        Text(option.rawValue).tag(option)
+                    }
+                }
+                .pickerStyle(.segmented)
+                .padding(.bottom, 4)
+
+                ForEach(filteredSessions) { session in
                     NavigationLink(value: session.id) {
                         SessionCard(
                             session: session,
                             pendingRequest: store.pendingPermissions[session.id],
+                            isUnread: store.unread.contains(session.id),
                             onQuickRespond: { allow in
                                 Task { await store.quickRespond(sessionID: session.id, allow: allow) }
                             }
                         )
                     }
                     .buttonStyle(.plain)
+                    .contextMenu {
+                        if session.status == "done" || session.status == "error" {
+                            Button("Remove session", systemImage: "trash", role: .destructive) {
+                                Task { await store.removeSession(session.id) }
+                            }
+                        }
+                    }
                 }
             }
             .padding(.horizontal)
@@ -119,6 +161,7 @@ struct SessionCard: View {
     @Environment(\.surfaces) private var surfaces
     let session: SessionInfo
     let pendingRequest: PermissionRequest?
+    var isUnread = false
     var onQuickRespond: (Bool) -> Void = { _ in }
 
     private var hasPendingPermission: Bool { pendingRequest != nil }
@@ -130,9 +173,16 @@ struct SessionCard: View {
                     .frame(width: 14, height: 14)
 
                 VStack(alignment: .leading, spacing: 3) {
-                    Text(directoryName)
-                        .font(.headline)
-                        .lineLimit(1)
+                    HStack(spacing: 6) {
+                        Text(directoryName)
+                            .font(.headline)
+                            .lineLimit(1)
+                        if isUnread {
+                            Circle()
+                                .fill(.tint)
+                                .frame(width: 8, height: 8)
+                        }
+                    }
                     Text(session.cwd)
                         .font(.caption.monospaced())
                         .foregroundStyle(.tertiary)
@@ -278,30 +328,67 @@ struct ConnectionBadge: View {
     }
 }
 
-/// Start a session in a directory on the paired machine.
+/// Start a session in a directory on the paired machine. Recent directories
+/// are offered as tappable choices; typing is the fallback.
 struct NewSessionView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.dismiss) private var dismiss
     @State private var cwd = ""
     @State private var prompt = ""
     @State private var isCreating = false
+    @State private var recentDirs: [String] = []
 
     var body: some View {
         NavigationStack {
             Form {
+                if !recentDirs.isEmpty {
+                    Section("Recent directories") {
+                        ForEach(recentDirs, id: \.self) { dir in
+                            Button {
+                                cwd = dir
+                            } label: {
+                                HStack {
+                                    Image(systemName: "clock.arrow.circlepath")
+                                        .foregroundStyle(.tint)
+                                    VStack(alignment: .leading, spacing: 1) {
+                                        Text(URL(fileURLWithPath: dir).lastPathComponent)
+                                            .font(.callout.bold())
+                                            .foregroundStyle(.primary)
+                                        Text(dir)
+                                            .font(.caption2.monospaced())
+                                            .foregroundStyle(.tertiary)
+                                            .lineLimit(1)
+                                            .truncationMode(.head)
+                                    }
+                                    Spacer()
+                                    if cwd == dir {
+                                        Image(systemName: "checkmark")
+                                            .foregroundStyle(.tint)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 Section {
                     TextField("/Users/you/projects/app", text: $cwd)
                         .autocorrectionDisabled()
                         .textInputAutocapitalization(.never)
                         .font(.callout.monospaced())
                 } header: {
-                    Text("Working directory")
+                    Text(recentDirs.isEmpty ? "Working directory" : "Or type a path")
                 } footer: {
                     Text("Absolute path on your paired machine.")
                 }
                 Section("Initial prompt (optional)") {
                     TextField("Fix the failing CI on branch main…", text: $prompt, axis: .vertical)
                         .lineLimit(3...8)
+                }
+            }
+            .task {
+                recentDirs = await store.listDirs()
+                if cwd.isEmpty, let first = recentDirs.first {
+                    cwd = first
                 }
             }
             .navigationTitle("New session")

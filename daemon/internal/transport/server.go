@@ -160,6 +160,12 @@ func (c *client) handle(ctx context.Context, env proto.Envelope) {
 		c.mu.Unlock()
 		c.reply(ctx, env, nil, nil)
 
+	case proto.CmdSessionRemove:
+		c.reply(ctx, env, nil, c.srv.Manager.Remove(env.SessionID))
+
+	case proto.CmdDirsList:
+		c.reply(ctx, env, proto.DirsList{Dirs: c.srv.Manager.RecentDirs()}, nil)
+
 	default:
 		c.reply(ctx, env, nil, fmt.Errorf("unknown command %q", env.Type))
 	}

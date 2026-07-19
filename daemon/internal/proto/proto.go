@@ -29,6 +29,8 @@ const (
 	CmdSessionCancel  = "session.cancel"
 	CmdSessionWatch   = "session.watch"
 	CmdSessionUnwatch = "session.unwatch"
+	CmdSessionRemove  = "session.remove"
+	CmdDirsList       = "dirs.list"
 	CmdPairRequest    = "pair.request"
 )
 
@@ -89,6 +91,12 @@ type SessionInfo struct {
 // SessionList is the data of a session.list reply.
 type SessionList struct {
 	Sessions []SessionInfo `json:"sessions"`
+}
+
+// DirsList is the data of a dirs.list reply: recently used working
+// directories, most recent first.
+type DirsList struct {
+	Dirs []string `json:"dirs"`
 }
 
 // SessionState reports a session status change.

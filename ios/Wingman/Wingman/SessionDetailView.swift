@@ -71,7 +71,13 @@ struct SessionDetailView: View {
                 }
             }
         }
-        .task { await store.watch(sessionID) }
+        .task {
+            await store.watch(sessionID)
+            store.markRead(sessionID)
+        }
+        .onChange(of: transcript.count) { _, _ in
+            store.markRead(sessionID)
+        }
         .sheet(item: permissionBinding) { request in
             ApprovalSheet(sessionID: sessionID, request: request)
                 .presentationDetents([.medium])

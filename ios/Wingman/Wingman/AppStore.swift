@@ -48,6 +48,8 @@ final class AppStore: ObservableObject {
     @Published var transcripts: [String: [TranscriptItem]] = [:]
     @Published var pendingPermissions: [String: PermissionRequest] = [:] // sessionID → request
     @Published var lastError: String?
+    /// Sessions with activity the user hasn't viewed yet.
+    @Published var unread: Set<String> = []
 
     private var client: WingmanClient?
     private var pumpTask: Task<Void, Never>?
@@ -267,6 +269,30 @@ final class AppStore: ObservableObject {
         }
     }
 
+    func removeSession(_ sessionID: String) async {
+        guard let client else { return }
+        do {
+            try await client.removeSession(sessionID: sessionID)
+            sessions.removeAll { $0.id == sessionID }
+            transcripts[sessionID] = nil
+            unread.remove(sessionID)
+            watched.remove(sessionID)
+            lastSeq[sessionID] = nil
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    func listDirs() async -> [String] {
+        guard let client else { return [] }
+        return (try? await client.listDirs()) ?? []
+    }
+
+    /// Marks a session as viewed (called when its detail screen is open).
+    func markRead(_ sessionID: String) {
+        unread.remove(sessionID)
+    }
+
     func createSession(cwd: String, prompt: String) async -> SessionInfo? {
         guard let client else { return nil }
         do {
@@ -285,6 +311,9 @@ final class AppStore: ObservableObject {
         guard let sessionID = envelope.sessionId else { return }
         if let seq = envelope.seq {
             lastSeq[sessionID] = max(lastSeq[sessionID] ?? 0, seq)
+        }
+        if envelope.type == Proto.evtTranscriptDelta || envelope.type == Proto.evtPermissionRequest {
+            unread.insert(sessionID)
         }
 
         switch envelope.type {
