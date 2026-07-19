@@ -29,6 +29,7 @@ const (
 	CmdSessionCancel  = "session.cancel"
 	CmdSessionWatch   = "session.watch"
 	CmdSessionUnwatch = "session.unwatch"
+	CmdPairRequest    = "pair.request"
 )
 
 // Event types (daemon → phone).
@@ -61,6 +62,13 @@ type SessionApprove struct {
 // SessionWatch subscribes to a session's event stream from a sequence number.
 type SessionWatch struct {
 	FromSeq uint64 `json:"fromSeq"`
+}
+
+// PairRequest is the first message an unpaired device sends over a freshly
+// established secure channel.
+type PairRequest struct {
+	Token      string `json:"token"`
+	DeviceName string `json:"deviceName"`
 }
 
 // Result is the payload of every "res" reply.

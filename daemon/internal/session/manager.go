@@ -114,13 +114,17 @@ func (m *Manager) Create(ctx context.Context, cwd string) (*Session, error) {
 	s.acpID = acpID
 	s.setStatus(StatusIdle)
 
-	// Reap: if the subprocess dies, mark the session errored.
+	// Reap: when the subprocess exits, a session that was idle completed
+	// normally; anything else is an error.
 	go func() {
 		<-client.Done()
 		s.mu.Lock()
 		st := s.status
 		s.mu.Unlock()
-		if st != StatusDone {
+		switch st {
+		case StatusIdle, StatusDone:
+			s.setStatus(StatusDone)
+		default:
 			s.setStatus(StatusError)
 		}
 	}()

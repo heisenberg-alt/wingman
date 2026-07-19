@@ -1,9 +1,27 @@
 # Wingman wire protocol — v1
 
 The protocol spoken between the Wingman app (phone) and `wingmand` (daemon).
-In Phase 1 it runs over a loopback WebSocket; from Phase 2 the same messages are
-carried inside a Noise XX end-to-end encrypted channel, either via the relay or
-a direct LAN connection. The relay never sees these messages in plaintext.
+Messages are carried inside a Noise XX end-to-end encrypted channel
+(X25519, ChaCha20-Poly1305, SHA-256), either over the daemon's external LAN
+listener or through the relay. The relay routes opaque ciphertext by
+rendezvous room id and never sees these messages in plaintext. The loopback
+listener on `127.0.0.1` carries the same messages without the Noise layer.
+
+## Pairing
+
+1. `wingmand pair` asks the running daemon for a payload
+   `{ v, pub, lan, relay, room, token }` and renders it as a QR code. The
+   token is single-use and expires after 10 minutes.
+2. The phone connects (LAN address or relay room), performs the Noise XX
+   handshake, and pins `pub` as the expected responder key.
+3. An unpaired phone must send `pair.request { token, deviceName }` as its
+   first message. On success the daemon registers the phone's static key in
+   `~/.wingman/devices.json` and serves the connection immediately.
+4. Paired devices skip step 3; the daemon authorizes them by their Noise
+   static key.
+
+If no paired device answers a permission request, it fails safe to deny after
+a configurable timeout (default 5 minutes).
 
 All messages are JSON objects with a common envelope:
 
@@ -17,6 +35,7 @@ All messages are JSON objects with a common envelope:
   "payload": { }
 }
 ```
+| `pair.request` | `{ token, deviceName }` | `{}` — only valid as the first message from an unpaired device |
 
 - `id` correlates a command with its `res` reply.
 - `seq` is a per-session monotonically increasing sequence number assigned by

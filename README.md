@@ -71,7 +71,7 @@ The phone and daemon exchange JSON messages over a WebSocket, defined in [docs/P
 |-------|-------|--------|
 | 0 | Repository, architecture, protocol specification | Complete |
 | 1 | Daemon core, ACP integration, loopback transport | Complete |
-| 2 | Noise E2E channel, QR pairing, relay | Planned |
+| 2 | Noise E2E channel, QR pairing, relay | Complete |
 | 3 | iOS app | Planned |
 | 4 | Push notifications, lock-screen approvals | Planned |
 | 5 | PTY terminal, diff viewer, usage statistics | Planned |

@@ -1,6 +1,6 @@
 // wingman-cli is a terminal test client for wingmand. It stands in for the
-// phone app: it creates or watches sessions, streams the transcript, and
-// answers permission requests interactively.
+// phone app: it pairs with a daemon, creates or watches sessions over the
+// secure channel, streams transcripts, and answers permission requests.
 package main
 
 import (
@@ -9,14 +9,20 @@ import (
 	"encoding/json"
 	"flag"
 	"fmt"
+	"net/url"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync/atomic"
 
 	"github.com/coder/websocket"
+	"github.com/flynn/noise"
 
+	"github.com/heisenberg-alt/wingman/daemon/internal/pairing"
 	"github.com/heisenberg-alt/wingman/daemon/internal/proto"
+	"github.com/heisenberg-alt/wingman/daemon/internal/securechan"
+	"github.com/heisenberg-alt/wingman/daemon/internal/wsconn"
 )
 
 func main() {
@@ -25,6 +31,8 @@ func main() {
 		os.Exit(2)
 	}
 	switch os.Args[1] {
+	case "pair":
+		cmdPair(os.Args[2:])
 	case "list":
 		cmdList(os.Args[2:])
 	case "run":
@@ -41,31 +49,144 @@ func usage() {
 	fmt.Fprintln(os.Stderr, `wingman-cli — test client for wingmand
 
 Usage:
-  wingman-cli list  [--addr ws://127.0.0.1:7420/ws]
-  wingman-cli run   [--addr ...] --cwd DIR [--prompt TEXT]
-  wingman-cli watch [--addr ...] --session ID [--from-seq N]`)
+  wingman-cli pair  --payload JSON [--name NAME] [--via lan|relay]
+  wingman-cli list  [--addr ws://127.0.0.1:7420/ws | --secure [--via lan|relay]]
+  wingman-cli run   [connection flags] --cwd DIR [--prompt TEXT]
+  wingman-cli watch [connection flags] --session ID [--from-seq N]
+
+With --secure, the client connects through the daemon's Noise-secured external
+listener or the relay, using the identity saved by "pair". Without it, the
+plaintext loopback listener at --addr is used.`)
 }
 
-type conn struct {
-	ws     *websocket.Conn
-	nextID atomic.Int64
-	// replies delivers "res" envelopes by correlation id.
-	replies chan proto.Envelope
-	// events delivers seq-numbered session events.
-	events chan proto.Envelope
+// config is the client's persisted identity and daemon contact info.
+type config struct {
+	Private   []byte `json:"private"`
+	Public    []byte `json:"public"`
+	DaemonPub []byte `json:"daemonPub"`
+	Lan       string `json:"lan,omitempty"`
+	Relay     string `json:"relay,omitempty"`
+	Room      string `json:"room"`
 }
 
-func dial(ctx context.Context, addr string) (*conn, error) {
+func configPath() string {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return ".wingman-cli.json"
+	}
+	return filepath.Join(home, ".wingman-cli.json")
+}
+
+func loadConfig() (*config, error) {
+	data, err := os.ReadFile(configPath())
+	if err != nil {
+		return nil, fmt.Errorf("no pairing config, run \"wingman-cli pair\" first: %w", err)
+	}
+	var cfg config
+	if err := json.Unmarshal(data, &cfg); err != nil {
+		return nil, err
+	}
+	return &cfg, nil
+}
+
+func (c *config) save() error {
+	data, err := json.MarshalIndent(c, "", "  ")
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(configPath(), data, 0o600)
+}
+
+func (c *config) key() noise.DHKey {
+	return noise.DHKey{Private: c.Private, Public: c.Public}
+}
+
+// connFlags holds the connection options shared by all commands.
+type connFlags struct {
+	addr   *string
+	secure *bool
+	via    *string
+}
+
+func newFlagSet(name string) (*flag.FlagSet, *connFlags) {
+	fs := flag.NewFlagSet(name, flag.ExitOnError)
+	cf := &connFlags{
+		addr:   fs.String("addr", "ws://127.0.0.1:7420/ws", "loopback WebSocket address"),
+		secure: fs.Bool("secure", false, "connect through the Noise-secured channel"),
+		via:    fs.String("via", "lan", "secure path: lan or relay"),
+	}
+	return fs, cf
+}
+
+// connect dials according to the connection flags.
+func (cf *connFlags) connect(ctx context.Context) (*conn, error) {
+	if !*cf.secure {
+		mc, err := dialWS(ctx, *cf.addr)
+		if err != nil {
+			return nil, err
+		}
+		return newConn(ctx, mc), nil
+	}
+
+	cfg, err := loadConfig()
+	if err != nil {
+		return nil, err
+	}
+	sc, err := dialSecure(ctx, cfg, *cf.via)
+	if err != nil {
+		return nil, err
+	}
+	return newConn(ctx, sc), nil
+}
+
+func dialWS(ctx context.Context, addr string) (securechan.MessageConn, error) {
 	ws, _, err := websocket.Dial(ctx, addr, nil)
 	if err != nil {
 		return nil, err
 	}
-	ws.SetReadLimit(16 << 20)
-	c := &conn{ws: ws, replies: make(chan proto.Envelope, 16), events: make(chan proto.Envelope, 256)}
+	return wsconn.New(ws), nil
+}
+
+// dialSecure connects via LAN or relay and completes the Noise handshake,
+// pinning the daemon's public key.
+func dialSecure(ctx context.Context, cfg *config, via string) (securechan.MessageConn, error) {
+	var raw securechan.MessageConn
+	var err error
+	switch via {
+	case "lan":
+		if cfg.Lan == "" {
+			return nil, fmt.Errorf("no LAN address in pairing config")
+		}
+		raw, err = dialWS(ctx, "ws://"+cfg.Lan+"/ws")
+	case "relay":
+		if cfg.Relay == "" {
+			return nil, fmt.Errorf("no relay URL in pairing config")
+		}
+		raw, err = dialWS(ctx, cfg.Relay+"/v1/join?room="+url.QueryEscape(cfg.Room))
+	default:
+		return nil, fmt.Errorf("unknown --via %q (want lan or relay)", via)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return securechan.Initiate(ctx, raw, cfg.key(), cfg.DaemonPub)
+}
+
+// conn multiplexes replies and events over one protocol connection.
+type conn struct {
+	mc     securechan.MessageConn
+	nextID atomic.Int64
+	// replies delivers "res" envelopes; events delivers session events.
+	replies chan proto.Envelope
+	events  chan proto.Envelope
+}
+
+func newConn(ctx context.Context, mc securechan.MessageConn) *conn {
+	c := &conn{mc: mc, replies: make(chan proto.Envelope, 16), events: make(chan proto.Envelope, 256)}
 	go func() {
 		defer close(c.events)
 		for {
-			_, data, err := ws.Read(ctx)
+			data, err := mc.Read(ctx)
 			if err != nil {
 				return
 			}
@@ -80,7 +201,7 @@ func dial(ctx context.Context, addr string) (*conn, error) {
 			}
 		}
 	}()
-	return c, nil
+	return c
 }
 
 func (c *conn) call(ctx context.Context, msgType, sessionID string, payload any) (proto.Result, error) {
@@ -90,7 +211,7 @@ func (c *conn) call(ctx context.Context, msgType, sessionID string, payload any)
 		env.Payload = proto.Marshal(payload)
 	}
 	data, _ := json.Marshal(env)
-	if err := c.ws.Write(ctx, websocket.MessageText, data); err != nil {
+	if err := c.mc.Write(ctx, data); err != nil {
 		return proto.Result{}, err
 	}
 	for {
@@ -116,19 +237,47 @@ func (c *conn) call(ctx context.Context, msgType, sessionID string, payload any)
 	}
 }
 
-// newFlagSet creates a flag set pre-populated with the shared --addr flag.
-func newFlagSet(name string) (*flag.FlagSet, *string) {
-	fs := flag.NewFlagSet(name, flag.ExitOnError)
-	addr := fs.String("addr", "ws://127.0.0.1:7420/ws", "wingmand WebSocket address")
-	return fs, addr
+func cmdPair(args []string) {
+	fs := flag.NewFlagSet("pair", flag.ExitOnError)
+	payloadJSON := fs.String("payload", "", "pairing payload JSON from \"wingmand pair --json\" (required)")
+	name := fs.String("name", "wingman-cli", "device name to register")
+	via := fs.String("via", "lan", "pairing path: lan or relay")
+	_ = fs.Parse(args)
+	if *payloadJSON == "" {
+		fatalIf(fmt.Errorf("--payload is required"))
+	}
+
+	var payload pairing.Payload
+	fatalIf(json.Unmarshal([]byte(*payloadJSON), &payload))
+
+	key, err := securechan.GenerateKey()
+	fatalIf(err)
+	cfg := &config{
+		Private:   key.Private,
+		Public:    key.Public,
+		DaemonPub: payload.Pub,
+		Lan:       payload.Lan,
+		Relay:     payload.Relay,
+		Room:      payload.Room,
+	}
+
+	ctx := context.Background()
+	sc, err := dialSecure(ctx, cfg, *via)
+	fatalIf(err)
+	c := newConn(ctx, sc)
+
+	_, err = c.call(ctx, proto.CmdPairRequest, "", proto.PairRequest{Token: payload.Token, DeviceName: *name})
+	fatalIf(err)
+	fatalIf(cfg.save())
+	fmt.Printf("paired as %q; config saved to %s\n", *name, configPath())
 }
 
 func cmdList(args []string) {
-	fs, addr := newFlagSet("list")
+	fs, cf := newFlagSet("list")
 	_ = fs.Parse(args)
 
 	ctx := context.Background()
-	c, err := dial(ctx, *addr)
+	c, err := cf.connect(ctx)
 	fatalIf(err)
 	res, err := c.call(ctx, proto.CmdSessionList, "", nil)
 	fatalIf(err)
@@ -145,7 +294,7 @@ func cmdList(args []string) {
 }
 
 func cmdRun(args []string) {
-	fs, addr := newFlagSet("run")
+	fs, cf := newFlagSet("run")
 	cwd := fs.String("cwd", "", "working directory for the session (required)")
 	prompt := fs.String("prompt", "", "initial prompt")
 	_ = fs.Parse(args)
@@ -154,7 +303,7 @@ func cmdRun(args []string) {
 	}
 
 	ctx := context.Background()
-	c, err := dial(ctx, *addr)
+	c, err := cf.connect(ctx)
 	fatalIf(err)
 
 	res, err := c.call(ctx, proto.CmdSessionCreate, "", proto.SessionCreate{Cwd: *cwd, Prompt: *prompt})
@@ -169,7 +318,7 @@ func cmdRun(args []string) {
 }
 
 func cmdWatch(args []string) {
-	fs, addr := newFlagSet("watch")
+	fs, cf := newFlagSet("watch")
 	sessionID := fs.String("session", "", "session id (required)")
 	fromSeq := fs.Uint64("from-seq", 0, "replay events after this sequence number")
 	_ = fs.Parse(args)
@@ -178,7 +327,7 @@ func cmdWatch(args []string) {
 	}
 
 	ctx := context.Background()
-	c, err := dial(ctx, *addr)
+	c, err := cf.connect(ctx)
 	fatalIf(err)
 	_, err = c.call(ctx, proto.CmdSessionWatch, *sessionID, proto.SessionWatch{FromSeq: *fromSeq})
 	fatalIf(err)

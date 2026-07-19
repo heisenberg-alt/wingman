@@ -1,6 +1,7 @@
-// Package transport serves the Wingman wire protocol over a loopback
-// WebSocket. From Phase 2 the same message stream is carried inside a Noise
-// E2E channel via the relay or LAN.
+// Package transport serves the Wingman wire protocol. The protocol handler is
+// transport-agnostic: it speaks over any securechan.MessageConn, fed by the
+// loopback WebSocket listener, the Noise-secured external listener, or the
+// relay dialer.
 package transport
 
 import (
@@ -13,18 +14,26 @@ import (
 	"github.com/coder/websocket"
 
 	"github.com/heisenberg-alt/wingman/daemon/internal/proto"
+	"github.com/heisenberg-alt/wingman/daemon/internal/securechan"
 	"github.com/heisenberg-alt/wingman/daemon/internal/session"
+	"github.com/heisenberg-alt/wingman/daemon/internal/wsconn"
 )
 
-// Server handles WebSocket clients speaking the Wingman protocol.
+// Server handles clients speaking the Wingman protocol.
 type Server struct {
 	Manager *session.Manager
 }
 
-// Handler returns the HTTP handler for the /ws endpoint.
+// Handler returns the HTTP handler for the loopback /ws endpoint.
 func (s *Server) Handler() http.Handler {
 	mux := http.NewServeMux()
-	mux.HandleFunc("/ws", s.handleWS)
+	mux.HandleFunc("/ws", func(w http.ResponseWriter, r *http.Request) {
+		conn, err := websocket.Accept(w, r, nil)
+		if err != nil {
+			return
+		}
+		s.ServeConn(r.Context(), wsconn.New(conn))
+	})
 	mux.HandleFunc("/healthz", func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("ok"))
@@ -32,33 +41,17 @@ func (s *Server) Handler() http.Handler {
 	return mux
 }
 
-func (s *Server) handleWS(w http.ResponseWriter, r *http.Request) {
-	conn, err := websocket.Accept(w, r, nil)
-	if err != nil {
-		return
-	}
+// ServeConn runs the protocol loop over mc until the connection closes. It
+// closes mc before returning.
+func (s *Server) ServeConn(ctx context.Context, mc securechan.MessageConn) {
 	c := &client{
 		srv:     s,
-		conn:    conn,
+		mc:      mc,
 		watches: make(map[string]func()),
 	}
 	defer c.close()
-	c.run(r.Context())
-}
-
-type client struct {
-	srv  *Server
-	conn *websocket.Conn
-
-	writeMu sync.Mutex
-
-	mu      sync.Mutex
-	watches map[string]func() // sessionID → unsubscribe
-}
-
-func (c *client) run(ctx context.Context) {
 	for {
-		_, data, err := c.conn.Read(ctx)
+		data, err := mc.Read(ctx)
 		if err != nil {
 			return
 		}
@@ -70,6 +63,16 @@ func (c *client) run(ctx context.Context) {
 	}
 }
 
+type client struct {
+	srv *Server
+	mc  securechan.MessageConn
+
+	writeMu sync.Mutex
+
+	mu      sync.Mutex
+	watches map[string]func() // sessionID → unsubscribe
+}
+
 func (c *client) close() {
 	c.mu.Lock()
 	for _, cancel := range c.watches {
@@ -77,7 +80,7 @@ func (c *client) close() {
 	}
 	c.watches = map[string]func(){}
 	c.mu.Unlock()
-	_ = c.conn.Close(websocket.StatusNormalClosure, "")
+	_ = c.mc.Close()
 }
 
 func (c *client) handle(ctx context.Context, env proto.Envelope) {
@@ -253,5 +256,5 @@ func (c *client) send(ctx context.Context, env proto.Envelope) error {
 	}
 	c.writeMu.Lock()
 	defer c.writeMu.Unlock()
-	return c.conn.Write(ctx, websocket.MessageText, data)
+	return c.mc.Write(ctx, data)
 }
