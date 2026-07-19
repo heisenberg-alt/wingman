@@ -123,7 +123,7 @@ included: token auth, keepalive pings, per-IP rate limiting, and a room cap.
 | 2 | Noise E2E channel, QR pairing, relay | Complete |
 | 3 | iOS app: pairing, dashboard, live transcript, approvals | Complete |
 | 4 | Push notifications, lock-screen approvals | Planned |
-| 5 | PTY terminal, diff viewer, usage statistics | Planned |
+| 5 | PTY terminal, diff viewer, usage statistics, keep-alive (prevent the host machine from sleeping while sessions run or a phone is connected) | Planned |
 | 6 | Hardening, Android | Planned |
 
 ## License
