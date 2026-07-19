@@ -13,12 +13,12 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-# devicectl (CoreDevice) UUID for install/launch.
-UDID=${1:-$(xcrun devicectl list devices 2>/dev/null | grep -oE '[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}' | head -1)}
+# devicectl (CoreDevice) UUID for install/launch — iPhones only, not Watches.
+UDID=${1:-$(xcrun devicectl list devices 2>/dev/null | grep 'iPhone' | grep -oE '[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}' | head -1)}
 [ -n "$UDID" ] || { echo "error: no iPhone found; is it plugged in and unlocked?" >&2; exit 1; }
 # xcodebuild hardware identifier (e.g. 00008140-...), needed as the build
 # destination so Xcode registers the device with the (free) team.
-XCID=$(xcrun xctrace list devices 2>/dev/null | grep -v Simulator | grep -oE '\(0000[0-9A-F]+-[0-9A-F]+\)' | tr -d '()' | head -1)
+XCID=$(xcrun xctrace list devices 2>/dev/null | grep -iv 'watch' | grep -v Simulator | grep -oE '\(0000[0-9A-F]+-[0-9A-F]+\)' | tr -d '()' | head -1)
 [ -n "$XCID" ] || { echo "error: xcodebuild device id not found" >&2; exit 1; }
 echo "device: $UDID (build id: $XCID)"
 
