@@ -21,6 +21,8 @@ targets:
         UILaunchScreen: {}
         NSCameraUsageDescription: Wingman uses the camera to scan the pairing QR code from your terminal.
         NSLocalNetworkUsageDescription: Wingman connects directly to your dev machine on the local network.
+        NSMicrophoneUsageDescription: Wingman uses the microphone so you can dictate prompts to Copilot.
+        NSSpeechRecognitionUsageDescription: Wingman transcribes your speech on-device to compose prompts.
         UISupportedInterfaceOrientations:
           - UIInterfaceOrientationPortrait
     settings:

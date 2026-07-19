@@ -12,6 +12,7 @@
 		2D15653EBD475A19CD4B599F /* WingmanKit in Frameworks */ = {isa = PBXBuildFile; productRef = FEE9BA270316673DC34BECE4 /* WingmanKit */; };
 		4B41F3CB47E6BE0B5EDF98B5 /* RichText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16299CBA8A9BDE5765EB3F34 /* RichText.swift */; };
 		4EFEA4BB5EED595D50DA5196 /* SessionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7ED1169B3602A9E880E4829 /* SessionDetailView.swift */; };
+		7D81DB92BC9C3865663D93F8 /* SpeechRecognizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3012B134C07BD5BA70A7525 /* SpeechRecognizer.swift */; };
 		A1460A62777AF2785425A7D4 /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA6CFF61A53BF526348D6416 /* AppStore.swift */; };
 		BB494E4EC4D50CACF7F620BA /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 724EBB69B885EFCA0026BCC5 /* SettingsView.swift */; };
 		BD8856D5A5427501A6A323D0 /* WingmanApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76B66866D50E48470A04C811 /* WingmanApp.swift */; };
@@ -29,6 +30,7 @@
 		8F855A6CED25F20636F63009 /* PairingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingView.swift; sourceTree = "<group>"; };
 		9DE643D98754CE9814885F3C /* Keychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keychain.swift; sourceTree = "<group>"; };
 		A7ED1169B3602A9E880E4829 /* SessionDetailView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionDetailView.swift; sourceTree = "<group>"; };
+		B3012B134C07BD5BA70A7525 /* SpeechRecognizer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SpeechRecognizer.swift; sourceTree = "<group>"; };
 		B38115FCFA4100C5AEBDA794 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		CBD1FBE2F2543D4430FFFAEC /* WingmanKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = WingmanKit; path = ../WingmanKit; sourceTree = SOURCE_ROOT; };
 		D97F85B8282F37E75E4E7088 /* SessionListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionListView.swift; sourceTree = "<group>"; };
@@ -77,6 +79,7 @@
 				A7ED1169B3602A9E880E4829 /* SessionDetailView.swift */,
 				D97F85B8282F37E75E4E7088 /* SessionListView.swift */,
 				724EBB69B885EFCA0026BCC5 /* SettingsView.swift */,
+				B3012B134C07BD5BA70A7525 /* SpeechRecognizer.swift */,
 				59079017CB797CC1FD7934C1 /* Theme.swift */,
 				76B66866D50E48470A04C811 /* WingmanApp.swift */,
 			);
@@ -174,6 +177,7 @@
 				4EFEA4BB5EED595D50DA5196 /* SessionDetailView.swift in Sources */,
 				FE5C50A4ADD7272502583280 /* SessionListView.swift in Sources */,
 				BB494E4EC4D50CACF7F620BA /* SettingsView.swift in Sources */,
+				7D81DB92BC9C3865663D93F8 /* SpeechRecognizer.swift in Sources */,
 				C4C7DF71DF3737ABF1EC8B58 /* Theme.swift in Sources */,
 				BD8856D5A5427501A6A323D0 /* WingmanApp.swift in Sources */,
 			);

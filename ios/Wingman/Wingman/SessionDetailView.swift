@@ -7,6 +7,8 @@ struct SessionDetailView: View {
     @Environment(\.surfaces) private var surfaces
     let sessionID: String
     @State private var promptText = ""
+    @StateObject private var speech = SpeechRecognizer()
+    @State private var dictationBase = ""
     @FocusState private var composerFocused: Bool
 
     private var session: SessionInfo? {
@@ -78,6 +80,9 @@ struct SessionDetailView: View {
         .onChange(of: transcript.count) { _, _ in
             store.markRead(sessionID)
         }
+        .onDisappear {
+            speech.stop()
+        }
         .sheet(item: permissionBinding) { request in
             ApprovalSheet(sessionID: sessionID, request: request)
                 .presentationDetents([.medium])
@@ -95,31 +100,69 @@ struct SessionDetailView: View {
     }
 
     private var composer: some View {
-        HStack(alignment: .bottom, spacing: 10) {
-            TextField("Message Copilot…", text: $promptText, axis: .vertical)
-                .focused($composerFocused)
-                .lineLimit(1...4)
+        VStack(spacing: 0) {
+            if speech.isRecording {
+                HStack(spacing: 8) {
+                    Image(systemName: "waveform")
+                        .symbolEffect(.variableColor.iterative, options: .repeating)
+                        .foregroundStyle(.red)
+                    Text(speech.transcript.isEmpty ? "Listening…" : speech.transcript)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                    Spacer()
+                }
                 .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 20))
-
-            Button {
-                let text = promptText.trimmingCharacters(in: .whitespacesAndNewlines)
-                promptText = ""
-                Task { await store.sendPrompt(sessionID, text: text) }
-            } label: {
-                Image(systemName: "arrow.up")
-                    .font(.body.bold())
-                    .foregroundStyle(.white)
-                    .frame(width: 34, height: 34)
-                    .background(canSend ? Color.accentColor : Color.secondary.opacity(0.4), in: Circle())
+                .padding(.vertical, 6)
+                .background(.red.opacity(0.08))
             }
-            .disabled(!canSend)
-            .animation(.snappy, value: canSend)
+            if let message = speech.errorMessage {
+                Text(message)
+                    .font(.caption2)
+                    .foregroundStyle(.red)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 4)
+            }
+
+            HStack(alignment: .bottom, spacing: 10) {
+                TextField("Message Copilot…", text: $promptText, axis: .vertical)
+                    .focused($composerFocused)
+                    .lineLimit(1...4)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 9)
+                    .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 20))
+
+                MicButton(speech: speech)
+
+                Button {
+                    let text = promptText.trimmingCharacters(in: .whitespacesAndNewlines)
+                    promptText = ""
+                    Task { await store.sendPrompt(sessionID, text: text) }
+                } label: {
+                    Image(systemName: "arrow.up")
+                        .font(.body.bold())
+                        .foregroundStyle(.white)
+                        .frame(width: 34, height: 34)
+                        .background(canSend ? Color.accentColor : Color.secondary.opacity(0.4), in: Circle())
+                }
+                .disabled(!canSend)
+                .animation(.snappy, value: canSend)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
         .background(.bar)
+        .onChange(of: speech.isRecording) { _, recording in
+            if recording {
+                // Dictation appends to whatever was already typed.
+                dictationBase = promptText
+            }
+        }
+        .onChange(of: speech.transcript) { _, transcript in
+            guard speech.isRecording || !transcript.isEmpty else { return }
+            let separator = dictationBase.isEmpty || dictationBase.hasSuffix(" ") ? "" : " "
+            promptText = dictationBase + separator + transcript
+        }
     }
 
     private var canSend: Bool {
