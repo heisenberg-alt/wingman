@@ -13,20 +13,23 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+# devicectl (CoreDevice) UUID for install/launch.
 UDID=${1:-$(xcrun devicectl list devices 2>/dev/null | grep -oE '[0-9A-F]{8}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{4}-[0-9A-F]{12}' | head -1)}
 [ -n "$UDID" ] || { echo "error: no iPhone found; is it plugged in and unlocked?" >&2; exit 1; }
-echo "device: $UDID"
+# xcodebuild hardware identifier (e.g. 00008140-...), needed as the build
+# destination so Xcode registers the device with the (free) team.
+XCID=$(xcrun xctrace list devices 2>/dev/null | grep -v Simulator | grep -oE '\(0000[0-9A-F]+-[0-9A-F]+\)' | tr -d '()' | head -1)
+[ -n "$XCID" ] || { echo "error: xcodebuild device id not found" >&2; exit 1; }
+echo "device: $UDID (build id: $XCID)"
 
 if ! security find-identity -p codesigning -v | grep -q "Apple Development"; then
-  echo "error: no Apple Development signing identity." >&2
-  echo "Sign into Xcode (Settings → Accounts) and select a team on the Wingman target first." >&2
-  exit 1
+  echo "note: no signing certificate yet; xcodebuild will create one via the Xcode account" >&2
 fi
 
 echo "== building signed app =="
 cd ios/Wingman
 xcodebuild -project Wingman.xcodeproj -scheme Wingman \
-  -destination "id=$UDID" -allowProvisioningUpdates -quiet build
+  -destination "platform=iOS,id=$XCID" -allowProvisioningUpdates -quiet build
 
 APP=$(find ~/Library/Developer/Xcode/DerivedData -path '*Debug-iphoneos/Wingman.app' | head -1)
 [ -n "$APP" ] || { echo "error: built app bundle not found" >&2; exit 1; }

@@ -115,6 +115,7 @@
 				LastUpgradeCheck = 1600;
 				TargetAttributes = {
 					DEC1B9C312BAC507B3A6A828 = {
+						DevelopmentTeam = 7N46F2J273;
 						ProvisioningStyle = Automatic;
 					};
 				};
@@ -177,6 +178,7 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 7N46F2J273;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Wingman/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -199,6 +201,7 @@
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = 7N46F2J273;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = Wingman/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
