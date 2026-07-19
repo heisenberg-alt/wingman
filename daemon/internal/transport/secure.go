@@ -44,22 +44,25 @@ func (ss *SecureServer) Handler() http.Handler {
 
 // ServeConn performs the handshake and authorization, then runs the protocol.
 // Unpaired peers must present a valid single-use pairing token as their first
-// message; on success they are registered and served immediately.
-func (ss *SecureServer) ServeConn(ctx context.Context, raw securechan.MessageConn) {
+// message; on success they are registered and served immediately. The return
+// value reports whether the Noise handshake completed — callers use it to
+// distinguish real peer interactions from transport flaps.
+func (ss *SecureServer) ServeConn(ctx context.Context, raw securechan.MessageConn) bool {
 	sc, err := securechan.Respond(ctx, raw, ss.Static)
 	if err != nil {
 		ss.Logger.Warn("handshake failed", "err", err)
 		_ = raw.Close()
-		return
+		return false
 	}
 
 	if !ss.Registry.IsAuthorized(sc.PeerStatic()) {
 		if !ss.pair(ctx, sc) {
 			_ = sc.Close()
-			return
+			return true
 		}
 	}
 	ss.Server.ServeConn(ctx, sc)
+	return true
 }
 
 // pair handles the pairing exchange for an unknown peer. It returns true if
@@ -97,8 +100,10 @@ func (ss *SecureServer) pair(ctx context.Context, sc *securechan.Conn) bool {
 }
 
 // RunRelayHost maintains the daemon's connection to the relay, serving one
-// secured peer connection at a time and reconnecting with backoff. Short-lived
-// connections also back off, so a misbehaving relay cannot induce a hot loop.
+// secured peer connection at a time. It reconnects immediately after serving
+// a real peer (normal operations are often sub-second), and backs off only on
+// dial failures or connections that never complete a handshake, so a
+// misbehaving relay cannot induce a hot loop.
 func RunRelayHost(ctx context.Context, relayURL, room string, ss *SecureServer) {
 	backoff := time.Second
 	wait := func() bool {
@@ -124,11 +129,8 @@ func RunRelayHost(ctx context.Context, relayURL, room string, ss *SecureServer) 
 		}
 		ss.Logger.Info("connected to relay", "url", relayURL, "room", room)
 
-		start := time.Now()
 		// Blocks until the peer disconnects or the relay drops us.
-		ss.ServeConn(ctx, wsconn.New(ws))
-
-		if time.Since(start) >= 2*time.Second {
+		if ss.ServeConn(ctx, wsconn.New(ws)) {
 			backoff = time.Second
 		} else if !wait() {
 			return
