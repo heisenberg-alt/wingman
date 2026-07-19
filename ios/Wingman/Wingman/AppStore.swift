@@ -49,6 +49,7 @@ final class AppStore: ObservableObject {
 
     private var client: WingmanClient?
     private var pumpTask: Task<Void, Never>?
+    private var refreshTask: Task<Void, Never>?
     private var watched: Set<String> = []
     private var lastSeq: [String: UInt64] = [:]
 
@@ -85,6 +86,7 @@ final class AppStore: ObservableObject {
 
     func unpair() {
         pumpTask?.cancel()
+        refreshTask?.cancel()
         Task { await client?.disconnect() }
         client = nil
         Keychain.deleteConfig()
@@ -154,6 +156,15 @@ final class AppStore: ObservableObject {
                 guard let self, self.client === client else { return }
                 self.client = nil
                 self.connection = .disconnected
+            }
+        }
+        // Until push notifications (Phase 4), keep the dashboard fresh by
+        // polling the session list.
+        refreshTask?.cancel()
+        refreshTask = Task { [weak self] in
+            while !Task.isCancelled {
+                try? await Task.sleep(for: .seconds(4))
+                await self?.refreshSessions()
             }
         }
     }

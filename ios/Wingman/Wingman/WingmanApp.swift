@@ -24,7 +24,17 @@ struct RootView: View {
                 SessionListView()
             }
         }
-        .task { await store.connect() }
+        .task {
+            #if DEBUG
+            // Dev/UI-test hook: auto-pair from an environment payload, since
+            // the simulator has no camera for the QR flow.
+            if store.config == nil,
+               let payload = ProcessInfo.processInfo.environment["WINGMAN_PAIR_PAYLOAD"] {
+                await store.pair(payloadJSON: payload, deviceName: "simulator")
+            }
+            #endif
+            await store.connect()
+        }
         .onChange(of: scenePhase) { _, phase in
             if phase == .active {
                 Task { await store.connect() }
