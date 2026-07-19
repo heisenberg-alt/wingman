@@ -18,6 +18,8 @@ dist/
 ios/**/xcuserdata/
 ios/**/*.xcworkspace/xcuserdata/
 ios/**/DerivedData/
+ios/**/.build/
+ios/**/.swiftpm/
 *.ipa
 *.dSYM.zip
 
