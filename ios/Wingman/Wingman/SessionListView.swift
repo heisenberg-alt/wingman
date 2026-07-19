@@ -4,10 +4,13 @@ import WingmanKit
 /// Dashboard: all sessions on the paired machine, with live status.
 struct SessionListView: View {
     @EnvironmentObject private var store: AppStore
+    @Environment(\.surfaces) private var surfaces
     @State private var showNewSession = false
+    @State private var showSettings = false
+    @State private var path = NavigationPath()
 
     var body: some View {
-        NavigationStack {
+        NavigationStack(path: $path) {
             Group {
                 if store.sessions.isEmpty {
                     emptyState
@@ -19,15 +22,20 @@ struct SessionListView: View {
             .navigationDestination(for: String.self) { sessionID in
                 SessionDetailView(sessionID: sessionID)
             }
+            .safeAreaInset(edge: .top) {
+                if store.connection == .disconnected {
+                    ReconnectBanner()
+                }
+            }
             .toolbar {
                 ToolbarItem(placement: .topBarLeading) {
                     ConnectionBadge(state: store.connection)
                 }
                 ToolbarItem(placement: .topBarTrailing) {
-                    Menu {
-                        Button("Unpair device", role: .destructive) { store.unpair() }
+                    Button {
+                        showSettings = true
                     } label: {
-                        Image(systemName: "ellipsis.circle")
+                        Image(systemName: "gearshape")
                     }
                 }
             }
@@ -38,6 +46,18 @@ struct SessionListView: View {
             .sheet(isPresented: $showNewSession) {
                 NewSessionView()
                     .presentationDetents([.medium])
+            }
+            .sheet(isPresented: $showSettings) {
+                SettingsView()
+            }
+            .onChange(of: store.sessions.count) { _, _ in
+                #if DEBUG
+                // UI-test hook: auto-navigate into the newest session.
+                if ProcessInfo.processInfo.environment["WINGMAN_AUTO_OPEN"] != nil,
+                   path.isEmpty, let first = store.sessions.first {
+                    path.append(first.id)
+                }
+                #endif
             }
             .sensoryFeedback(.warning, trigger: store.pendingPermissions.count) { old, new in
                 new > old // buzz when a new approval arrives
@@ -52,7 +72,10 @@ struct SessionListView: View {
                     NavigationLink(value: session.id) {
                         SessionCard(
                             session: session,
-                            hasPendingPermission: store.pendingPermissions[session.id] != nil
+                            pendingRequest: store.pendingPermissions[session.id],
+                            onQuickRespond: { allow in
+                                Task { await store.quickRespond(sessionID: session.id, allow: allow) }
+                            }
                         )
                     }
                     .buttonStyle(.plain)
@@ -61,7 +84,7 @@ struct SessionListView: View {
             .padding(.horizontal)
             .padding(.top, 4)
         }
-        .background(Color(.systemGroupedBackground))
+        .background(surfaces.canvas)
         .animation(.snappy, value: store.sessions)
     }
 
@@ -90,52 +113,71 @@ struct SessionListView: View {
     }
 }
 
-/// One session, rendered as a card.
+/// One session, rendered as a card. Pending permission requests surface
+/// inline approve/deny actions for the fastest possible response.
 struct SessionCard: View {
+    @Environment(\.surfaces) private var surfaces
     let session: SessionInfo
-    let hasPendingPermission: Bool
+    let pendingRequest: PermissionRequest?
+    var onQuickRespond: (Bool) -> Void = { _ in }
+
+    private var hasPendingPermission: Bool { pendingRequest != nil }
 
     var body: some View {
-        HStack(spacing: 14) {
-            StatusDot(status: session.status)
-                .frame(width: 14, height: 14)
+        VStack(spacing: 0) {
+            HStack(spacing: 14) {
+                StatusDot(status: session.status)
+                    .frame(width: 14, height: 14)
 
-            VStack(alignment: .leading, spacing: 3) {
-                Text(directoryName)
-                    .font(.headline)
-                    .lineLimit(1)
-                Text(session.cwd)
-                    .font(.caption.monospaced())
-                    .foregroundStyle(.tertiary)
-                    .lineLimit(1)
-                    .truncationMode(.head)
-            }
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(directoryName)
+                        .font(.headline)
+                        .lineLimit(1)
+                    Text(session.cwd)
+                        .font(.caption.monospaced())
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+                        .truncationMode(.head)
+                }
 
-            Spacer(minLength: 8)
+                Spacer(minLength: 8)
 
-            VStack(alignment: .trailing, spacing: 4) {
-                if hasPendingPermission {
-                    Label("Approve", systemImage: "exclamationmark.shield.fill")
-                        .font(.caption2.bold())
-                        .foregroundStyle(.white)
-                        .padding(.horizontal, 8)
-                        .padding(.vertical, 3)
-                        .background(.orange, in: Capsule())
-                } else {
+                VStack(alignment: .trailing, spacing: 4) {
                     Text(statusLabel)
                         .font(.caption2.smallCaps())
                         .foregroundStyle(statusColor(session.status))
+                    Text(session.createdAt, format: .relative(presentation: .named))
+                        .font(.caption2)
+                        .foregroundStyle(.tertiary)
                 }
-                Text(session.createdAt, format: .relative(presentation: .named))
-                    .font(.caption2)
-                    .foregroundStyle(.tertiary)
+            }
+
+            if let request = pendingRequest {
+                Divider()
+                    .padding(.vertical, 10)
+                HStack(spacing: 10) {
+                    Label(request.title ?? "Permission requested", systemImage: "exclamationmark.shield.fill")
+                        .font(.caption.bold())
+                        .foregroundStyle(.orange)
+                        .lineLimit(1)
+                    Spacer()
+                    Button("Deny") { onQuickRespond(false) }
+                        .buttonStyle(.bordered)
+                        .buttonBorderShape(.capsule)
+                        .controlSize(.small)
+                        .tint(.red)
+                    Button("Allow") { onQuickRespond(true) }
+                        .buttonStyle(.borderedProminent)
+                        .buttonBorderShape(.capsule)
+                        .controlSize(.small)
+                }
             }
         }
         .padding(14)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 16))
+        .background(surfaces.card, in: RoundedRectangle(cornerRadius: Brand.cardCornerRadius))
         .overlay {
             if hasPendingPermission {
-                RoundedRectangle(cornerRadius: 16)
+                RoundedRectangle(cornerRadius: Brand.cardCornerRadius)
                     .strokeBorder(.orange.opacity(0.5), lineWidth: 1.5)
             }
         }
@@ -185,6 +227,29 @@ struct StatusDot: View {
         }
         .onAppear { pulsing = isActive }
         .onChange(of: status) { _, _ in pulsing = isActive }
+    }
+}
+
+/// Banner shown while the connection is down; retries happen automatically.
+struct ReconnectBanner: View {
+    @EnvironmentObject private var store: AppStore
+
+    var body: some View {
+        HStack(spacing: 8) {
+            ProgressView()
+                .controlSize(.small)
+            Text("Reconnecting…")
+                .font(.footnote.bold())
+            Spacer()
+            Button("Retry now") {
+                Task { await store.connect() }
+            }
+            .font(.footnote.bold())
+        }
+        .padding(.horizontal, 14)
+        .padding(.vertical, 8)
+        .background(.orange.opacity(0.15))
+        .overlay(alignment: .bottom) { Divider() }
     }
 }
 

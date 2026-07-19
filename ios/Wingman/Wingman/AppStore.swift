@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import Network
 import SwiftUI
 import WingmanKit
 
@@ -51,11 +52,23 @@ final class AppStore: ObservableObject {
     private var client: WingmanClient?
     private var pumpTask: Task<Void, Never>?
     private var refreshTask: Task<Void, Never>?
+    private var reconnectTask: Task<Void, Never>?
+    private let pathMonitor = NWPathMonitor()
     private var watched: Set<String> = []
     private var lastSeq: [String: UInt64] = [:]
 
     init() {
         config = Keychain.loadConfig()
+        // Reconnect promptly when the network path changes (Wi-Fi ↔ hotspot
+        // ↔ cellular), instead of waiting for the user to foreground the app.
+        pathMonitor.pathUpdateHandler = { [weak self] path in
+            guard path.status == .satisfied else { return }
+            Task { @MainActor [weak self] in
+                guard let self, self.connection == .disconnected else { return }
+                await self.connect()
+            }
+        }
+        pathMonitor.start(queue: .main)
     }
 
     // MARK: - Pairing
@@ -89,6 +102,7 @@ final class AppStore: ObservableObject {
     func unpair() {
         pumpTask?.cancel()
         refreshTask?.cancel()
+        reconnectTask?.cancel()
         Task { await client?.disconnect() }
         client = nil
         Keychain.deleteConfig()
@@ -149,6 +163,7 @@ final class AppStore: ObservableObject {
     private func adopt(client: WingmanClient, via: String) {
         self.client = client
         connection = .connected(via: via)
+        reconnectTask?.cancel()
         pumpTask?.cancel()
         pumpTask = Task { [weak self] in
             for await envelope in await client.events {
@@ -158,6 +173,7 @@ final class AppStore: ObservableObject {
                 guard let self, self.client === client else { return }
                 self.client = nil
                 self.connection = .disconnected
+                self.scheduleReconnect()
             }
         }
         // Until push notifications (Phase 4), keep the dashboard fresh by
@@ -167,6 +183,24 @@ final class AppStore: ObservableObject {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(4))
                 await self?.refreshSessions()
+            }
+        }
+    }
+
+    /// Retries the connection with exponential backoff until it succeeds or
+    /// the device is unpaired. Network-path changes trigger immediate retries
+    /// independently of this loop.
+    private func scheduleReconnect() {
+        reconnectTask?.cancel()
+        reconnectTask = Task { [weak self] in
+            var delay: Duration = .seconds(1)
+            while !Task.isCancelled {
+                try? await Task.sleep(for: delay)
+                guard let self, self.config != nil else { return }
+                if self.connection != .disconnected { return }
+                await self.connect()
+                if self.connection != .disconnected { return }
+                delay = min(delay * 2, .seconds(30))
             }
         }
     }
@@ -210,6 +244,24 @@ final class AppStore: ObservableObject {
         do {
             try await client.approve(sessionID: sessionID, requestID: requestID, optionID: optionID)
             pendingPermissions[sessionID] = nil
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    /// Answers a pending request from the dashboard with the first option of
+    /// the given kind prefix ("allow" or "reject").
+    func quickRespond(sessionID: String, allow: Bool) async {
+        guard let request = pendingPermissions[sessionID] else { return }
+        let prefix = allow ? "allow" : "reject"
+        guard let option = request.options.first(where: { $0.kind.hasPrefix(prefix) }) else { return }
+        await approve(sessionID: sessionID, requestID: request.requestId, optionID: option.optionId)
+    }
+
+    func cancel(_ sessionID: String) async {
+        guard let client else { return }
+        do {
+            try await client.cancel(sessionID: sessionID)
         } catch {
             lastError = error.localizedDescription
         }

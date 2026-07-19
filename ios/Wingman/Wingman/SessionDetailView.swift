@@ -4,6 +4,7 @@ import WingmanKit
 /// Live transcript with prompt composer and permission approval sheet.
 struct SessionDetailView: View {
     @EnvironmentObject private var store: AppStore
+    @Environment(\.surfaces) private var surfaces
     let sessionID: String
     @State private var promptText = ""
     @FocusState private var composerFocused: Bool
@@ -35,7 +36,7 @@ struct SessionDetailView: View {
                     }
                     .padding()
                 }
-                .background(Color(.systemGroupedBackground))
+                .background(surfaces.canvas)
                 .onChange(of: transcript.count) { _, _ in
                     if let lastID = transcript.last?.id {
                         withAnimation(.snappy) { proxy.scrollTo(lastID, anchor: .bottom) }
@@ -49,6 +50,16 @@ struct SessionDetailView: View {
         .navigationTitle(session.map { URL(fileURLWithPath: $0.cwd).lastPathComponent } ?? "Session")
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
+            ToolbarItem(placement: .topBarTrailing) {
+                if let session, session.status == "running" || session.status == "awaiting_permission" {
+                    Button(role: .destructive) {
+                        Task { await store.cancel(sessionID) }
+                    } label: {
+                        Image(systemName: "stop.circle.fill")
+                            .foregroundStyle(.red)
+                    }
+                }
+            }
             ToolbarItem(placement: .topBarTrailing) {
                 if let session {
                     HStack(spacing: 6) {
@@ -111,16 +122,16 @@ struct SessionDetailView: View {
 }
 
 struct TranscriptRow: View {
+    @Environment(\.surfaces) private var surfaces
     let item: TranscriptItem
 
     var body: some View {
         switch item.kind {
         case .message:
-            Text(item.text)
-                .textSelection(.enabled)
+            RichText(text: item.text)
                 .padding(.horizontal, 14)
                 .padding(.vertical, 10)
-                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
+                .background(surfaces.card, in: RoundedRectangle(cornerRadius: 18))
                 .frame(maxWidth: .infinity, alignment: .leading)
 
         case .thought:

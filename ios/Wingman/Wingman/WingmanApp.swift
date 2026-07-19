@@ -15,6 +15,9 @@ struct WingmanApp: App {
 struct RootView: View {
     @EnvironmentObject private var store: AppStore
     @Environment(\.scenePhase) private var scenePhase
+    @AppStorage("appTheme") private var themeRaw = AppTheme.system.rawValue
+
+    private var theme: AppTheme { AppTheme(rawValue: themeRaw) ?? .system }
 
     var body: some View {
         Group {
@@ -24,6 +27,8 @@ struct RootView: View {
                 SessionListView()
             }
         }
+        .preferredColorScheme(theme.colorScheme)
+        .environment(\.appTheme, theme)
         .task {
             #if DEBUG
             // Dev/UI-test hook: auto-pair from an environment payload, since

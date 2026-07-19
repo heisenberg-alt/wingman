@@ -12,12 +12,8 @@ struct PairingView: View {
     var body: some View {
         NavigationStack {
             ZStack {
-                LinearGradient(
-                    colors: [Color(red: 0.09, green: 0.10, blue: 0.24), Color(red: 0.36, green: 0.33, blue: 0.91)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
+                Brand.heroGradient
+                    .ignoresSafeArea()
 
                 VStack(spacing: 0) {
                     Spacer()

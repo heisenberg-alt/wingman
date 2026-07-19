@@ -10,14 +10,20 @@
 		08B61B7CBFADFEC9040B8089 /* PairingView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8F855A6CED25F20636F63009 /* PairingView.swift */; };
 		13E688E912E1F6549E3FDE44 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 82BF2E26970C2A88BEA11D29 /* Assets.xcassets */; };
 		2D15653EBD475A19CD4B599F /* WingmanKit in Frameworks */ = {isa = PBXBuildFile; productRef = FEE9BA270316673DC34BECE4 /* WingmanKit */; };
+		4B41F3CB47E6BE0B5EDF98B5 /* RichText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16299CBA8A9BDE5765EB3F34 /* RichText.swift */; };
 		4EFEA4BB5EED595D50DA5196 /* SessionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7ED1169B3602A9E880E4829 /* SessionDetailView.swift */; };
 		A1460A62777AF2785425A7D4 /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA6CFF61A53BF526348D6416 /* AppStore.swift */; };
+		BB494E4EC4D50CACF7F620BA /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 724EBB69B885EFCA0026BCC5 /* SettingsView.swift */; };
 		BD8856D5A5427501A6A323D0 /* WingmanApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 76B66866D50E48470A04C811 /* WingmanApp.swift */; };
+		C4C7DF71DF3737ABF1EC8B58 /* Theme.swift in Sources */ = {isa = PBXBuildFile; fileRef = 59079017CB797CC1FD7934C1 /* Theme.swift */; };
 		E9CF1EF44C122606783F2519 /* Keychain.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9DE643D98754CE9814885F3C /* Keychain.swift */; };
 		FE5C50A4ADD7272502583280 /* SessionListView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D97F85B8282F37E75E4E7088 /* SessionListView.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXFileReference section */
+		16299CBA8A9BDE5765EB3F34 /* RichText.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RichText.swift; sourceTree = "<group>"; };
+		59079017CB797CC1FD7934C1 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
+		724EBB69B885EFCA0026BCC5 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		76B66866D50E48470A04C811 /* WingmanApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WingmanApp.swift; sourceTree = "<group>"; };
 		82BF2E26970C2A88BEA11D29 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		8F855A6CED25F20636F63009 /* PairingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingView.swift; sourceTree = "<group>"; };
@@ -67,8 +73,11 @@
 				B38115FCFA4100C5AEBDA794 /* Info.plist */,
 				9DE643D98754CE9814885F3C /* Keychain.swift */,
 				8F855A6CED25F20636F63009 /* PairingView.swift */,
+				16299CBA8A9BDE5765EB3F34 /* RichText.swift */,
 				A7ED1169B3602A9E880E4829 /* SessionDetailView.swift */,
 				D97F85B8282F37E75E4E7088 /* SessionListView.swift */,
+				724EBB69B885EFCA0026BCC5 /* SettingsView.swift */,
+				59079017CB797CC1FD7934C1 /* Theme.swift */,
 				76B66866D50E48470A04C811 /* WingmanApp.swift */,
 			);
 			path = Wingman;
@@ -161,8 +170,11 @@
 				A1460A62777AF2785425A7D4 /* AppStore.swift in Sources */,
 				E9CF1EF44C122606783F2519 /* Keychain.swift in Sources */,
 				08B61B7CBFADFEC9040B8089 /* PairingView.swift in Sources */,
+				4B41F3CB47E6BE0B5EDF98B5 /* RichText.swift in Sources */,
 				4EFEA4BB5EED595D50DA5196 /* SessionDetailView.swift in Sources */,
 				FE5C50A4ADD7272502583280 /* SessionListView.swift in Sources */,
+				BB494E4EC4D50CACF7F620BA /* SettingsView.swift in Sources */,
+				C4C7DF71DF3737ABF1EC8B58 /* Theme.swift in Sources */,
 				BD8856D5A5427501A6A323D0 /* WingmanApp.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
