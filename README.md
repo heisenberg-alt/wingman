@@ -33,8 +33,9 @@ Wingman consists of three components:
 | Path | Description |
 |------|-------------|
 | `daemon/` | `wingmand` daemon: ACP client, session manager, transport |
-| `relay/` | `relayd` relay service (Phase 2) |
-| `ios/` | Wingman iOS app (Phase 3) |
+| `relay/` | `relayd` relay service |
+| `ios/WingmanKit/` | Swift package: Noise channel (CryptoKit), protocol types, async client |
+| `ios/Wingman/` | Wingman iOS app (SwiftUI) |
 | `docs/` | [Protocol specification](docs/PROTOCOL.md) and architecture |
 
 ## Getting started
@@ -61,6 +62,32 @@ go run ./daemon/cmd/wingman-cli run --cwd ~/some/project --prompt "explain this 
 
 The client streams the transcript, surfaces permission requests for interactive approval, and exits when the turn completes. Use `wingman-cli list` to enumerate sessions and `wingman-cli watch --session ID` to attach to a running session.
 
+## iOS app
+
+Requires Xcode 16+. The app is generated from [ios/Wingman/project.yml](ios/Wingman/project.yml) with [XcodeGen](https://github.com/yonaskolb/XcodeGen); the generated project is checked in.
+
+```sh
+# Library tests, including a live Noise interop test against a running daemon
+cd ios/WingmanKit && swift test
+
+# Open the app
+open ios/Wingman/Wingman.xcodeproj
+```
+
+To pair: run `wingmand serve --external :7421` and `wingmand pair` on the dev
+machine, then scan the QR code from the app. The app prefers the LAN path and
+falls back to the relay automatically.
+
+## Ship gate
+
+```sh
+scripts/smoke.sh
+```
+
+Builds both Go modules, runs the full test suite, then exercises the real
+binaries end to end: relay and daemon startup, pairing via relay, encrypted
+traffic over both paths, and single-use token replay rejection.
+
 ## Protocol
 
 The phone and daemon exchange JSON messages over a WebSocket, defined in [docs/PROTOCOL.md](docs/PROTOCOL.md). Every session event carries a monotonic sequence number; clients resume after a disconnect by replaying from their last acknowledged sequence. Permission requests block the CLI until answered and fail safe to deny.
@@ -72,7 +99,7 @@ The phone and daemon exchange JSON messages over a WebSocket, defined in [docs/P
 | 0 | Repository, architecture, protocol specification | Complete |
 | 1 | Daemon core, ACP integration, loopback transport | Complete |
 | 2 | Noise E2E channel, QR pairing, relay | Complete |
-| 3 | iOS app | Planned |
+| 3 | iOS app: pairing, dashboard, live transcript, approvals | Complete |
 | 4 | Push notifications, lock-screen approvals | Planned |
 | 5 | PTY terminal, diff viewer, usage statistics | Planned |
 | 6 | Hardening, Android | Planned |
