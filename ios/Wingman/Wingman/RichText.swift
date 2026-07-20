@@ -108,7 +108,7 @@ struct CodeBlock: View {
                 Button {
                     UIPasteboard.general.string = code
                     copied = true
-                    Task {
+                    Task { @MainActor in
                         try? await Task.sleep(for: .seconds(1.5))
                         copied = false
                     }
