@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 /// Renders agent Markdown: inline styling via AttributedString, fenced code
 /// blocks as styled, copyable panels.
