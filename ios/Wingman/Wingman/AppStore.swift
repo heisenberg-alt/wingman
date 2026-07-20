@@ -73,6 +73,9 @@ final class AppStore: ObservableObject {
         pathMonitor.start(queue: .main)
     }
 
+    deinit {
+        pathMonitor.cancel()
+    }
     // MARK: - Pairing
 
     func pair(payloadJSON: String, deviceName: String) async {
