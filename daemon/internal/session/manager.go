@@ -259,12 +259,16 @@ func (m *Manager) rememberDir(cwd string) {
 	}
 	m.recent = next
 	path := m.recentDirsPath()
-	data, _ := json.Marshal(m.recent)
 	m.mu.Unlock()
 
-	if path != "" {
-		_ = os.WriteFile(path, data, 0o600)
+	if path == "" {
+		return
 	}
+	data, err := json.Marshal(next)
+	if err != nil {
+		return
+	}
+	_ = os.WriteFile(path, data, 0o600)
 }
 
 // Info snapshots the session's public state.
