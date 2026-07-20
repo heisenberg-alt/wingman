@@ -244,7 +244,14 @@ func (m *Manager) loadRecentDirs() {
 	if err != nil {
 		return
 	}
-	_ = json.Unmarshal(data, &m.recent)
+	if err := json.Unmarshal(data, &m.recent); err != nil {
+		m.cfg.Logger.Warn("failed to load recent dirs", "path", path, "err", err)
+		m.recent = nil
+		return
+	}
+	if len(m.recent) > maxRecentDirs {
+		m.recent = m.recent[:maxRecentDirs]
+	}
 }
 
 // rememberDir moves cwd to the front of the recents list and persists it.
