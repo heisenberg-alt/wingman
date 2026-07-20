@@ -116,6 +116,7 @@ final class AppStore: ObservableObject {
         sessions = []
         transcripts = [:]
         pendingPermissions = [:]
+        unread = []
         watched = []
         lastSeq = [:]
     }
