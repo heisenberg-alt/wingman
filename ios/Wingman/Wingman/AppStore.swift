@@ -278,6 +278,7 @@ final class AppStore: ObservableObject {
             try await client.removeSession(sessionID: sessionID)
             sessions.removeAll { $0.id == sessionID }
             transcripts[sessionID] = nil
+            pendingPermissions[sessionID] = nil
             unread.remove(sessionID)
             watched.remove(sessionID)
             lastSeq[sessionID] = nil
