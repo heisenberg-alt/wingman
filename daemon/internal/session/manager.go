@@ -259,16 +259,30 @@ func (m *Manager) rememberDir(cwd string) {
 	}
 	m.recent = next
 	path := m.recentDirsPath()
-	m.mu.Unlock()
 
 	if path == "" {
+		m.mu.Unlock()
 		return
 	}
+
+	if err := os.MkdirAll(m.cfg.StateDir, 0o700); err != nil {
+		m.mu.Unlock()
+		m.cfg.Logger.Warn("failed to create state dir", "dir", m.cfg.StateDir, "err", err)
+		return
+	}
+
 	data, err := json.Marshal(next)
 	if err != nil {
+		m.mu.Unlock()
+		m.cfg.Logger.Warn("failed to marshal recent dirs", "err", err)
 		return
 	}
-	_ = os.WriteFile(path, data, 0o600)
+	if err := os.WriteFile(path, data, 0o600); err != nil {
+		m.mu.Unlock()
+		m.cfg.Logger.Warn("failed to persist recent dirs", "path", path, "err", err)
+		return
+	}
+	m.mu.Unlock()
 }
 
 // Info snapshots the session's public state.
