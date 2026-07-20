@@ -202,16 +202,19 @@ func (m *Manager) CloseAll() {
 // error), releasing its subprocess.
 func (m *Manager) Remove(id string) error {
 	m.mu.Lock()
-	defer m.mu.Unlock()
 	s, ok := m.sessions[id]
 	if !ok {
+		m.mu.Unlock()
 		return fmt.Errorf("unknown session %q", id)
 	}
 	if st := s.Info().Status; st != StatusDone && st != StatusError {
+		m.mu.Unlock()
 		return fmt.Errorf("session is %s; only done or error sessions can be removed", st)
 	}
-	_ = s.client.Close()
 	delete(m.sessions, id)
+	m.mu.Unlock()
+
+	_ = s.client.Close()
 	m.cfg.Logger.Info("session removed", "id", id)
 	return nil
 }
