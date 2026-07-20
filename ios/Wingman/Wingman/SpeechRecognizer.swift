@@ -53,6 +53,9 @@ final class SpeechRecognizer: ObservableObject {
                 request.requiresOnDeviceRecognition = true
             }
 
+            self.audioEngine = engine
+            self.request = request
+
             let inputNode = engine.inputNode
             let format = inputNode.outputFormat(forBus: 0)
             inputNode.installTap(onBus: 0, bufferSize: 1024, format: format) { buffer, _ in
@@ -62,8 +65,6 @@ final class SpeechRecognizer: ObservableObject {
             engine.prepare()
             try engine.start()
 
-            self.audioEngine = engine
-            self.request = request
             self.isRecording = true
 
             self.task = recognizer.recognitionTask(with: request) { [weak self] result, error in
