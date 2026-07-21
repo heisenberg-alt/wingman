@@ -10,6 +10,7 @@ package hub
 import (
 	"context"
 	"crypto/subtle"
+	"errors"
 	"log/slog"
 	"net"
 	"net/http"
@@ -204,10 +205,18 @@ func (h *Hub) handleHost(w http.ResponseWriter, r *http.Request) {
 			case <-rm.done:
 				return
 			case <-ticker.C:
+				// Nothing reads a parked host connection, and coder/websocket
+				// only surfaces pongs to Ping during a concurrent Read — so a
+				// pong confirmation can never arrive here. The ping still
+				// matters: it keeps proxy connections open (the daemon's
+				// auto-pong makes traffic bidirectional). Treat a pong
+				// deadline as healthy; tear down only if the ping cannot be
+				// written at all. Truly dead hosts are reaped when the daemon
+				// redials and replaces the room.
 				pingCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 				err := conn.Ping(pingCtx)
 				cancel()
-				if err != nil {
+				if err != nil && !errors.Is(err, context.DeadlineExceeded) {
 					h.logger.Info("host keepalive failed", "room", roomID)
 					rm.teardown()
 					return
