@@ -203,7 +203,8 @@ final class AppStore: ObservableObject {
             while !Task.isCancelled {
                 try? await Task.sleep(for: delay)
                 guard let self, self.config != nil else { return }
-                if self.connection != .disconnected { return }
+                if case .connected = self.connection { return }
+                if self.connection != .disconnected { continue }
                 await self.connect()
                 if self.connection != .disconnected { return }
                 delay = min(delay * 2, .seconds(30))
