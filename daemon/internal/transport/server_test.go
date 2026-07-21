@@ -218,7 +218,7 @@ func TestCommandsForUnknownSessionFail(t *testing.T) {
 }
 
 func TestDirsListAndSessionRemove(t *testing.T) {
-	_, hts := newServer(t)
+	srv, hts := newServer(t)
 	c := dial(t, hts)
 
 	cwd := t.TempDir()
