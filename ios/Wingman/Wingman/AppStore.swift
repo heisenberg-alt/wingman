@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import Network
 import SwiftUI
 import WingmanKit
 
@@ -47,17 +48,34 @@ final class AppStore: ObservableObject {
     @Published var transcripts: [String: [TranscriptItem]] = [:]
     @Published var pendingPermissions: [String: PermissionRequest] = [:] // sessionID → request
     @Published var lastError: String?
+    /// Sessions with activity the user hasn't viewed yet.
+    @Published var unread: Set<String> = []
 
     private var client: WingmanClient?
     private var pumpTask: Task<Void, Never>?
     private var refreshTask: Task<Void, Never>?
+    private var reconnectTask: Task<Void, Never>?
+    private let pathMonitor = NWPathMonitor()
     private var watched: Set<String> = []
     private var lastSeq: [String: UInt64] = [:]
 
     init() {
         config = Keychain.loadConfig()
+        // Reconnect promptly when the network path changes (Wi-Fi ↔ hotspot
+        // ↔ cellular), instead of waiting for the user to foreground the app.
+        pathMonitor.pathUpdateHandler = { [weak self] path in
+            guard path.status == .satisfied else { return }
+            Task { @MainActor [weak self] in
+                guard let self, self.connection == .disconnected else { return }
+                await self.connect()
+            }
+        }
+        pathMonitor.start(queue: .main)
     }
 
+    deinit {
+        pathMonitor.cancel()
+    }
     // MARK: - Pairing
 
     func pair(payloadJSON: String, deviceName: String) async {
@@ -89,6 +107,7 @@ final class AppStore: ObservableObject {
     func unpair() {
         pumpTask?.cancel()
         refreshTask?.cancel()
+        reconnectTask?.cancel()
         Task { await client?.disconnect() }
         client = nil
         Keychain.deleteConfig()
@@ -97,6 +116,7 @@ final class AppStore: ObservableObject {
         sessions = []
         transcripts = [:]
         pendingPermissions = [:]
+        unread = []
         watched = []
         lastSeq = [:]
     }
@@ -149,6 +169,7 @@ final class AppStore: ObservableObject {
     private func adopt(client: WingmanClient, via: String) {
         self.client = client
         connection = .connected(via: via)
+        reconnectTask?.cancel()
         pumpTask?.cancel()
         pumpTask = Task { [weak self] in
             for await envelope in await client.events {
@@ -158,6 +179,7 @@ final class AppStore: ObservableObject {
                 guard let self, self.client === client else { return }
                 self.client = nil
                 self.connection = .disconnected
+                self.scheduleReconnect()
             }
         }
         // Until push notifications (Phase 4), keep the dashboard fresh by
@@ -167,6 +189,25 @@ final class AppStore: ObservableObject {
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(4))
                 await self?.refreshSessions()
+            }
+        }
+    }
+
+    /// Retries the connection with exponential backoff until it succeeds or
+    /// the device is unpaired. Network-path changes trigger immediate retries
+    /// independently of this loop.
+    private func scheduleReconnect() {
+        reconnectTask?.cancel()
+        reconnectTask = Task { [weak self] in
+            var delay: Duration = .seconds(1)
+            while !Task.isCancelled {
+                try? await Task.sleep(for: delay)
+                guard let self, self.config != nil else { return }
+                if case .connected = self.connection { return }
+                if self.connection != .disconnected { continue }
+                await self.connect()
+                if self.connection != .disconnected { return }
+                delay = min(delay * 2, .seconds(30))
             }
         }
     }
@@ -215,6 +256,49 @@ final class AppStore: ObservableObject {
         }
     }
 
+    /// Answers a pending request from the dashboard with the first option of
+    /// the given kind prefix ("allow" or "reject").
+    func quickRespond(sessionID: String, allow: Bool) async {
+        guard let request = pendingPermissions[sessionID] else { return }
+        let prefix = allow ? "allow" : "reject"
+        guard let option = request.options.first(where: { $0.kind.hasPrefix(prefix) }) else { return }
+        await approve(sessionID: sessionID, requestID: request.requestId, optionID: option.optionId)
+    }
+
+    func cancel(_ sessionID: String) async {
+        guard let client else { return }
+        do {
+            try await client.cancel(sessionID: sessionID)
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    func removeSession(_ sessionID: String) async {
+        guard let client else { return }
+        do {
+            try await client.removeSession(sessionID: sessionID)
+            sessions.removeAll { $0.id == sessionID }
+            transcripts[sessionID] = nil
+            pendingPermissions[sessionID] = nil
+            unread.remove(sessionID)
+            watched.remove(sessionID)
+            lastSeq[sessionID] = nil
+        } catch {
+            lastError = error.localizedDescription
+        }
+    }
+
+    func listDirs() async -> [String] {
+        guard let client else { return [] }
+        return (try? await client.listDirs()) ?? []
+    }
+
+    /// Marks a session as viewed (called when its detail screen is open).
+    func markRead(_ sessionID: String) {
+        unread.remove(sessionID)
+    }
+
     func createSession(cwd: String, prompt: String) async -> SessionInfo? {
         guard let client else { return nil }
         do {
@@ -233,6 +317,9 @@ final class AppStore: ObservableObject {
         guard let sessionID = envelope.sessionId else { return }
         if let seq = envelope.seq {
             lastSeq[sessionID] = max(lastSeq[sessionID] ?? 0, seq)
+        }
+        if envelope.type == Proto.evtTranscriptDelta || envelope.type == Proto.evtPermissionRequest {
+            unread.insert(sessionID)
         }
 
         switch envelope.type {

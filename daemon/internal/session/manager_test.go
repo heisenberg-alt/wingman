@@ -198,3 +198,60 @@ func TestListSortsNewestFirst(t *testing.T) {
 			list[0].ID, list[1].ID, second.ID, first.ID)
 	}
 }
+
+func TestRecentDirsPersistAcrossManagers(t *testing.T) {
+	stateDir := t.TempDir()
+	newWithState := func() *session.Manager {
+		m := session.NewManager(session.Config{
+			CopilotPath: acptest.Build(t),
+			StateDir:    stateDir,
+			Logger:      slog.New(slog.NewTextHandler(io.Discard, nil)),
+		})
+		t.Cleanup(m.CloseAll)
+		return m
+	}
+
+	m := newWithState()
+	cwd := t.TempDir()
+	if _, err := m.Create(context.Background(), cwd); err != nil {
+		t.Fatal(err)
+	}
+	dirs := m.RecentDirs()
+	if len(dirs) == 0 || dirs[0] != cwd {
+		t.Fatalf("recent dirs = %v, want %q first", dirs, cwd)
+	}
+
+	// A fresh manager sharing the state dir loads the same recents.
+	m2 := newWithState()
+	dirs2 := m2.RecentDirs()
+	if len(dirs2) == 0 || dirs2[0] != cwd {
+		t.Errorf("reloaded recent dirs = %v, want %q first", dirs2, cwd)
+	}
+}
+
+func TestRemoveOnlyTerminalSessions(t *testing.T) {
+	m := newManager(t, time.Minute)
+	s, err := m.Create(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Idle (non-terminal) sessions cannot be removed.
+	if err := m.Remove(s.ID); err == nil {
+		t.Fatal("removed an idle session")
+	}
+
+	// Closing the subprocess sends the idle session to done.
+	m.CloseAll()
+	waitStatus(t, s, session.StatusDone, 5*time.Second)
+
+	if err := m.Remove(s.ID); err != nil {
+		t.Fatalf("remove done session: %v", err)
+	}
+	if _, ok := m.Get(s.ID); ok {
+		t.Error("session still present after Remove")
+	}
+	if err := m.Remove(s.ID); err == nil {
+		t.Error("second remove succeeded")
+	}
+}

@@ -8,38 +8,37 @@ struct PairingView: View {
     @State private var pastedPayload = ""
     @State private var showScanner = false
     @State private var isPairing = false
+    @State private var appeared = false
 
     var body: some View {
         NavigationStack {
             ZStack {
-                LinearGradient(
-                    colors: [Color(red: 0.09, green: 0.10, blue: 0.24), Color(red: 0.36, green: 0.33, blue: 0.91)],
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                )
-                .ignoresSafeArea()
+                Brand.heroGradient
+                    .ignoresSafeArea()
 
                 VStack(spacing: 0) {
                     Spacer()
 
-                    // Wing mark, echoing the app icon.
-                    VStack(alignment: .leading, spacing: 9) {
-                        Capsule().fill(.white).frame(width: 120, height: 18)
-                        Capsule().fill(.white.opacity(0.85)).frame(width: 88, height: 18)
-                        Capsule().fill(.white.opacity(0.7)).frame(width: 56, height: 18)
-                    }
-                    .rotationEffect(.degrees(-8))
+                    // Wing mark, echoing the app icon, with a staggered entrance.
+                    WingMark(feather: 18)
+                        .opacity(appeared ? 1 : 0)
+                        .offset(x: appeared ? 0 : -40)
+                        .animation(.spring(duration: 0.7, bounce: 0.25), value: appeared)
 
                     Text("Wingman")
-                        .font(.system(size: 40, weight: .bold, design: .rounded))
+                        .font(Brand.display(40))
                         .foregroundStyle(.white)
                         .padding(.top, 26)
+                        .opacity(appeared ? 1 : 0)
+                        .animation(.easeOut(duration: 0.6).delay(0.15), value: appeared)
 
                     Text("Your seat beside Copilot,\nwherever you are.")
                         .font(.callout)
                         .foregroundStyle(.white.opacity(0.75))
                         .multilineTextAlignment(.center)
                         .padding(.top, 6)
+                        .opacity(appeared ? 1 : 0)
+                        .animation(.easeOut(duration: 0.6).delay(0.3), value: appeared)
 
                     Spacer()
 
@@ -100,6 +99,7 @@ struct PairingView: View {
                 }
                 .ignoresSafeArea()
             }
+            .onAppear { appeared = true }
             .overlay {
                 if isPairing {
                     ProgressView("Pairing…")

@@ -4,8 +4,11 @@ import WingmanKit
 /// Live transcript with prompt composer and permission approval sheet.
 struct SessionDetailView: View {
     @EnvironmentObject private var store: AppStore
+    @Environment(\.surfaces) private var surfaces
     let sessionID: String
     @State private var promptText = ""
+    @StateObject private var speech = SpeechRecognizer()
+    @State private var dictationBase = ""
     @FocusState private var composerFocused: Bool
 
     private var session: SessionInfo? {
@@ -35,7 +38,7 @@ struct SessionDetailView: View {
                     }
                     .padding()
                 }
-                .background(Color(.systemGroupedBackground))
+                .background(surfaces.canvas)
                 .onChange(of: transcript.count) { _, _ in
                     if let lastID = transcript.last?.id {
                         withAnimation(.snappy) { proxy.scrollTo(lastID, anchor: .bottom) }
@@ -50,6 +53,16 @@ struct SessionDetailView: View {
         .navigationBarTitleDisplayMode(.inline)
         .toolbar {
             ToolbarItem(placement: .topBarTrailing) {
+                if let session, session.status == "running" || session.status == "awaiting_permission" {
+                    Button(role: .destructive) {
+                        Task { await store.cancel(sessionID) }
+                    } label: {
+                        Image(systemName: "stop.circle.fill")
+                            .foregroundStyle(.red)
+                    }
+                }
+            }
+            ToolbarItem(placement: .topBarTrailing) {
                 if let session {
                     HStack(spacing: 6) {
                         StatusDot(status: session.status)
@@ -60,7 +73,16 @@ struct SessionDetailView: View {
                 }
             }
         }
-        .task { await store.watch(sessionID) }
+        .task {
+            await store.watch(sessionID)
+            store.markRead(sessionID)
+        }
+        .onChange(of: transcript.count) { _, _ in
+            store.markRead(sessionID)
+        }
+        .onDisappear {
+            speech.stop()
+        }
         .sheet(item: permissionBinding) { request in
             ApprovalSheet(sessionID: sessionID, request: request)
                 .presentationDetents([.medium])
@@ -78,31 +100,76 @@ struct SessionDetailView: View {
     }
 
     private var composer: some View {
-        HStack(alignment: .bottom, spacing: 10) {
-            TextField("Message Copilot…", text: $promptText, axis: .vertical)
-                .focused($composerFocused)
-                .lineLimit(1...4)
+        VStack(spacing: 0) {
+            if speech.isRecording {
+                HStack(spacing: 8) {
+                    Image(systemName: "waveform")
+                        .symbolEffect(.variableColor.iterative, options: .repeating)
+                        .foregroundStyle(.red)
+                    Text(speech.transcript.isEmpty ? "Listening…" : speech.transcript)
+                        .font(.footnote)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                    Spacer()
+                }
                 .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 20))
-
-            Button {
-                let text = promptText.trimmingCharacters(in: .whitespacesAndNewlines)
-                promptText = ""
-                Task { await store.sendPrompt(sessionID, text: text) }
-            } label: {
-                Image(systemName: "arrow.up")
-                    .font(.body.bold())
-                    .foregroundStyle(.white)
-                    .frame(width: 34, height: 34)
-                    .background(canSend ? Color.accentColor : Color.secondary.opacity(0.4), in: Circle())
+                .padding(.vertical, 6)
+                .background(.red.opacity(0.08))
             }
-            .disabled(!canSend)
-            .animation(.snappy, value: canSend)
+            if let message = speech.errorMessage {
+                Text(message)
+                    .font(.caption2)
+                    .foregroundStyle(.red)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 4)
+            }
+
+            HStack(alignment: .bottom, spacing: 10) {
+                TextField("Message Copilot…", text: $promptText, axis: .vertical)
+                    .focused($composerFocused)
+                    .lineLimit(1...4)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 9)
+                    .background(Color(.secondarySystemBackground), in: RoundedRectangle(cornerRadius: 20))
+
+                MicButton(speech: speech)
+
+                Button {
+                    let text = promptText.trimmingCharacters(in: .whitespacesAndNewlines)
+                    promptText = ""
+                    Task { await store.sendPrompt(sessionID, text: text) }
+                } label: {
+                    Image(systemName: "arrow.up")
+                        .font(.body.bold())
+                        .foregroundStyle(.white)
+                        .frame(width: 34, height: 34)
+                        .background {
+                            if canSend {
+                                Circle().fill(Brand.accentGradient)
+                            } else {
+                                Circle().fill(Color.secondary.opacity(0.4))
+                            }
+                        }
+                }
+                .buttonStyle(PressableStyle())
+                .disabled(!canSend)
+                .animation(.snappy, value: canSend)
+            }
+            .padding(.horizontal, 12)
+            .padding(.vertical, 8)
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
         .background(.bar)
+        .onChange(of: speech.isRecording) { _, recording in
+            if recording {
+                // Dictation appends to whatever was already typed.
+                dictationBase = promptText
+            }
+        }
+        .onChange(of: speech.transcript) { _, transcript in
+            guard speech.isRecording || !transcript.isEmpty else { return }
+            let separator = dictationBase.isEmpty || dictationBase.hasSuffix(" ") ? "" : " "
+            promptText = dictationBase + separator + transcript
+        }
     }
 
     private var canSend: Bool {
@@ -111,17 +178,20 @@ struct SessionDetailView: View {
 }
 
 struct TranscriptRow: View {
+    @Environment(\.surfaces) private var surfaces
     let item: TranscriptItem
 
     var body: some View {
         switch item.kind {
         case .message:
-            Text(item.text)
-                .textSelection(.enabled)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
-                .frame(maxWidth: .infinity, alignment: .leading)
+            HStack(alignment: .top, spacing: 10) {
+                CopilotAvatar()
+                RichText(text: item.text)
+                    .padding(.horizontal, 14)
+                    .padding(.vertical, 10)
+                    .background(surfaces.card, in: RoundedRectangle(cornerRadius: 18))
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
 
         case .thought:
             HStack(alignment: .top, spacing: 6) {
@@ -156,11 +226,12 @@ struct TranscriptRow: View {
                 .frame(maxWidth: .infinity)
 
         case .turnEnded:
-            HStack {
+            HStack(spacing: 8) {
                 Rectangle().fill(.quaternary).frame(height: 1)
-                Image(systemName: "checkmark.circle.fill")
-                    .font(.caption)
+                Label("Turn complete", systemImage: "checkmark.seal.fill")
+                    .font(.caption2.smallCaps())
                     .foregroundStyle(.green)
+                    .fixedSize()
                 Rectangle().fill(.quaternary).frame(height: 1)
             }
             .padding(.vertical, 2)
@@ -168,28 +239,51 @@ struct TranscriptRow: View {
     }
 }
 
-/// Three bouncing dots shown while the agent is working.
+/// Small gradient avatar marking Copilot's messages.
+struct CopilotAvatar: View {
+    var body: some View {
+        Image(systemName: "wind")
+            .font(.caption.bold())
+            .foregroundStyle(.white)
+            .frame(width: 26, height: 26)
+            .background(Brand.accentGradient, in: Circle())
+            .padding(.top, 2)
+    }
+}
+
+/// Copilot-is-working indicator: avatar plus shimmering label and dots.
 struct WorkingIndicator: View {
+    @Environment(\.surfaces) private var surfaces
     @State private var phase = false
 
     var body: some View {
-        HStack(spacing: 5) {
-            ForEach(0..<3) { index in
-                Circle()
-                    .fill(.secondary)
-                    .frame(width: 7, height: 7)
-                    .offset(y: phase ? -4 : 2)
-                    .animation(
-                        .easeInOut(duration: 0.5)
-                            .repeatForever(autoreverses: true)
-                            .delay(Double(index) * 0.15),
-                        value: phase
-                    )
+        HStack(spacing: 10) {
+            CopilotAvatar()
+            HStack(spacing: 8) {
+                Text("Copilot is working")
+                    .font(.callout)
+                    .foregroundStyle(.secondary)
+                    .opacity(phase ? 1.0 : 0.45)
+                    .animation(.easeInOut(duration: 0.9).repeatForever(autoreverses: true), value: phase)
+                HStack(spacing: 4) {
+                    ForEach(0..<3) { index in
+                        Circle()
+                            .fill(.secondary)
+                            .frame(width: 5, height: 5)
+                            .offset(y: phase ? -3 : 1)
+                            .animation(
+                                .easeInOut(duration: 0.5)
+                                    .repeatForever(autoreverses: true)
+                                    .delay(Double(index) * 0.15),
+                                value: phase
+                            )
+                    }
+                }
             }
+            .padding(.horizontal, 14)
+            .padding(.vertical, 10)
+            .background(surfaces.card, in: RoundedRectangle(cornerRadius: 18))
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 12)
-        .background(Color(.secondarySystemGroupedBackground), in: RoundedRectangle(cornerRadius: 18))
         .onAppear { phase = true }
     }
 }
@@ -200,6 +294,7 @@ struct ApprovalSheet: View {
     let sessionID: String
     let request: PermissionRequest
     @State private var responding = false
+    @State private var appeared = false
 
     var body: some View {
         VStack(spacing: 0) {
@@ -210,15 +305,24 @@ struct ApprovalSheet: View {
 
             Spacer()
 
-            Image(systemName: "exclamationmark.shield.fill")
-                .font(.system(size: 40))
-                .foregroundStyle(.white)
-                .frame(width: 76, height: 76)
-                .background(.orange.gradient, in: RoundedRectangle(cornerRadius: 20))
+            ZStack {
+                Circle()
+                    .fill(.orange.opacity(0.18))
+                    .frame(width: 110, height: 110)
+                    .blur(radius: 12)
+                Image(systemName: "exclamationmark.shield.fill")
+                    .font(.system(size: 40))
+                    .foregroundStyle(.white)
+                    .frame(width: 76, height: 76)
+                    .background(.orange.gradient, in: RoundedRectangle(cornerRadius: 20))
+                    .symbolEffect(.bounce, value: appeared)
+                    .scaleEffect(appeared ? 1 : 0.7)
+                    .animation(.spring(duration: 0.45, bounce: 0.4), value: appeared)
+            }
 
             Text("Copilot requests permission")
-                .font(.title3.bold())
-                .padding(.top, 16)
+                .font(Brand.display(20))
+                .padding(.top, 12)
 
             Text(request.title ?? "Tool call")
                 .font(.callout.monospaced())
@@ -250,6 +354,7 @@ struct ApprovalSheet: View {
         }
         .padding(.horizontal, 24)
         .padding(.bottom, 16)
+        .onAppear { appeared = true }
         .sensoryFeedback(.success, trigger: responding) { _, new in new }
     }
 

@@ -12,6 +12,8 @@ public enum Proto {
     public static let cmdSessionCancel = "session.cancel"
     public static let cmdSessionWatch = "session.watch"
     public static let cmdSessionUnwatch = "session.unwatch"
+    public static let cmdSessionRemove = "session.remove"
+    public static let cmdDirsList = "dirs.list"
     public static let cmdPairRequest = "pair.request"
 
     // Events (daemon → phone).
@@ -56,6 +58,10 @@ public struct SessionInfo: Codable, Sendable, Identifiable, Hashable {
 
 public struct SessionList: Codable, Sendable {
     public var sessions: [SessionInfo]
+}
+
+public struct DirsList: Codable, Sendable {
+    public var dirs: [String]
 }
 
 public struct SessionCreate: Codable, Sendable {

@@ -136,6 +136,16 @@ public actor WingmanClient {
         _ = try await call(Proto.cmdSessionUnwatch, sessionID: sessionID)
     }
 
+    public func removeSession(sessionID: String) async throws {
+        _ = try await call(Proto.cmdSessionRemove, sessionID: sessionID)
+    }
+
+    public func listDirs() async throws -> [String] {
+        let result = try await call(Proto.cmdDirsList)
+        guard let data = result.data else { throw ClientError.badReply }
+        return try data.decode(DirsList.self).dirs
+    }
+
     // MARK: - Wire plumbing
 
     private func call(
