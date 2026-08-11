@@ -9,8 +9,12 @@ Remote control for GitHub Copilot CLI. Monitor, prompt, and approve agent sessio
 Wingman consists of three components:
 
 - **`wingmand`** — a Go daemon on your development machine that drives [GitHub Copilot CLI](https://github.com/github/copilot-cli) sessions through its [Agent Client Protocol (ACP) server](https://docs.github.com/en/copilot/reference/copilot-cli-reference/acp-server), one subprocess per session.
-- **`relayd`** — a zero-knowledge relay that routes end-to-end encrypted frames between daemon and phone, and delivers push notifications. *(Phase 2)*
-- **Wingman for iOS** — a native SwiftUI app for observing and steering sessions. *(Phase 3)*
+- **`relayd`** — a zero-knowledge relay that routes end-to-end encrypted frames between daemon and phone. A single static binary, [one-command deployable to Fly.io](#public-relay); push notification delivery lands in Phase 4.
+- **Wingman for iOS** — a native SwiftUI app for observing and steering sessions, paired by QR code.
+
+**Status:** Phases 0–3 are complete — the daemon, the encrypted LAN/relay
+transport, and the iOS app work end to end against real Copilot CLI sessions
+(see the [roadmap](#roadmap)).
 
 ### Capabilities
 
@@ -26,7 +30,9 @@ Wingman consists of three components:
 - **Credentials stay local.** Copilot CLI retains its own GitHub authentication on the development machine. No GitHub tokens transit the relay.
 - **Explicit device pairing.** Devices pair once by scanning a QR code printed in the terminal. Keys are stored in the iOS Keychain and in `~/.wingman/keys`.
 - **Fail-safe approvals.** If no paired device responds, pending permission requests are denied after a configurable timeout (default: 5 minutes).
-- **Loopback by default.** In Phase 1 the daemon listens on `127.0.0.1` only.
+- **Loopback by default.** The daemon listens on `127.0.0.1` unless an
+  external listener is enabled with `--external`; remote access always rides
+  the Noise channel, over LAN or relay.
 
 ## Repository layout
 
@@ -36,7 +42,7 @@ Wingman consists of three components:
 | `relay/` | `relayd` relay service |
 | `ios/WingmanKit/` | Swift package: Noise channel (CryptoKit), protocol types, async client |
 | `ios/Wingman/` | Wingman iOS app (SwiftUI) |
-| `docs/` | [Protocol specification](docs/PROTOCOL.md) and architecture |
+| `docs/` | [Protocol specification](docs/PROTOCOL.md), [architecture decision records](docs/adr/), architecture |
 
 ## Getting started
 
@@ -91,6 +97,16 @@ traffic over both paths, and single-use token replay rejection.
 ## Protocol
 
 The phone and daemon exchange JSON messages over a WebSocket, defined in [docs/PROTOCOL.md](docs/PROTOCOL.md). Every session event carries a monotonic sequence number; clients resume after a disconnect by replaying from their last acknowledged sequence. Permission requests block the CLI until answered and fail safe to deny.
+
+## Design decisions
+
+The key architectural choices are recorded as ADRs in [docs/adr/](docs/adr/):
+[0001](docs/adr/0001-noise-xx-over-zero-knowledge-relay.md) Noise XX end-to-end
+encryption over a zero-knowledge relay ·
+[0002](docs/adr/0002-seq-numbered-event-log-replay.md) sequence-numbered event
+log with client-driven replay ·
+[0003](docs/adr/0003-fail-safe-deny-on-permission-timeout.md) fail-safe deny
+for unanswered permission requests.
 
 ## Public relay
 
