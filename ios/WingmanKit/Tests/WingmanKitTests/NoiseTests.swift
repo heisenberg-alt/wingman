@@ -55,6 +55,16 @@ import Testing
         }
     }
 
+    @Test func truncatedCiphertextRejected() {
+        var cipher = NoiseCipherState(key: SymmetricKey(size: .bits256))
+
+        for length in [0, 15] {
+            #expect(throws: NoiseError.malformedMessage) {
+                _ = try cipher.decrypt(ad: Data(), ciphertext: Data(count: length))
+            }
+        }
+    }
+
     @Test func truncatedHandshakeMessagesRejected() throws {
         let key = Curve25519.KeyAgreement.PrivateKey()
         var initiator = NoiseHandshakeInitiator(staticKey: key)
