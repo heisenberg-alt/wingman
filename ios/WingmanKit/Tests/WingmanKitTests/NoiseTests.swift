@@ -58,10 +58,14 @@ import Testing
     @Test func truncatedCiphertextRejected() {
         var cipher = NoiseCipherState(key: SymmetricKey(size: .bits256))
 
-        for length in [0, 15] {
+        for length in 0..<16 {
             #expect(throws: NoiseError.malformedMessage) {
                 _ = try cipher.decrypt(ad: Data(), ciphertext: Data(count: length))
             }
+        }
+
+        #expect(throws: NoiseError.decryptFailed) {
+            _ = try cipher.decrypt(ad: Data(), ciphertext: Data(count: 16))
         }
     }
 
