@@ -36,7 +36,9 @@ public struct NoiseCipherState: Sendable {
             authenticating: ad
         )
         nonce += 1
-        return box.ciphertext + box.tag
+        // Normalize indices: SealedBox.ciphertext is a slice of the combined
+        // buffer, so the concatenation can start at a non-zero index.
+        return Data(box.ciphertext + box.tag)
     }
 
     public mutating func decrypt(ad: Data, ciphertext: Data) throws -> Data {
