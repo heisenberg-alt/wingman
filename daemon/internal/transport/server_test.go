@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -17,6 +18,7 @@ import (
 
 	"github.com/heisenberg-alt/wingman/daemon/internal/acptest"
 	"github.com/heisenberg-alt/wingman/daemon/internal/proto"
+	"github.com/heisenberg-alt/wingman/daemon/internal/push"
 	"github.com/heisenberg-alt/wingman/daemon/internal/securechan"
 	"github.com/heisenberg-alt/wingman/daemon/internal/session"
 	"github.com/heisenberg-alt/wingman/daemon/internal/transport"
@@ -289,5 +291,40 @@ func TestRequireLoopbackRejectsRemotePeers(t *testing.T) {
 		if rec.Code != wantCode {
 			t.Errorf("remote %s: status = %d, want %d", remote, rec.Code, wantCode)
 		}
+	}
+}
+
+func TestPushRegisterCommand(t *testing.T) {
+	// Without a registry configured, the command is rejected.
+	_, hts := newServer(t)
+	c := dial(t, hts)
+	if res := c.call(proto.CmdPushRegister, "", proto.PushRegister{Token: "t1", Env: "sandbox"}); res.OK {
+		t.Error("push.register succeeded without push configured")
+	}
+
+	// With a registry, tokens are stored; bad envs are rejected.
+	reg, err := push.LoadTokens(filepath.Join(t.TempDir(), "push.json"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	mgr := session.NewManager(session.Config{
+		CopilotPath: acptest.Build(t),
+		Logger:      slog.New(slog.NewTextHandler(io.Discard, nil)),
+	})
+	t.Cleanup(mgr.CloseAll)
+	srv := &transport.Server{Manager: mgr, PushTokens: reg}
+	hts2 := httptest.NewServer(srv.Handler())
+	t.Cleanup(hts2.Close)
+	c2 := dial(t, hts2)
+
+	if res := c2.call(proto.CmdPushRegister, "", proto.PushRegister{Token: "t1", Env: "sandbox", DeviceName: "phone"}); !res.OK {
+		t.Fatalf("push.register failed: %s", res.Error)
+	}
+	if res := c2.call(proto.CmdPushRegister, "", proto.PushRegister{Token: "t2", Env: "bogus"}); res.OK {
+		t.Error("push.register accepted a bogus env")
+	}
+	devices := reg.List()
+	if len(devices) != 1 || devices[0].Token != "t1" || devices[0].Name != "phone" {
+		t.Errorf("registered devices = %+v", devices)
 	}
 }

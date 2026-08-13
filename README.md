@@ -9,7 +9,7 @@ Remote control for GitHub Copilot CLI. Monitor, prompt, and approve agent sessio
 Wingman consists of three components:
 
 - **`wingmand`** — a Go daemon on your development machine that drives [GitHub Copilot CLI](https://github.com/github/copilot-cli) sessions through its [Agent Client Protocol (ACP) server](https://docs.github.com/en/copilot/reference/copilot-cli-reference/acp-server), one subprocess per session.
-- **`relayd`** — a zero-knowledge relay that routes end-to-end encrypted frames between daemon and phone. A single static binary, [one-command deployable to Fly.io](#public-relay); push notification delivery lands in Phase 4.
+- **`relayd`** — a zero-knowledge relay that routes end-to-end encrypted frames between daemon and phone. A single static binary, [one-command deployable to Fly.io](#public-relay). Push notifications deliberately bypass it: the daemon talks to APNs directly (ADR-0006).
 - **Wingman for iOS** — a native SwiftUI app for observing and steering sessions, paired by QR code.
 
 **Status:** Phases 0–3 are complete — the daemon, the encrypted LAN/relay
@@ -113,7 +113,9 @@ for unanswered permission requests ·
 [0004](docs/adr/0004-relay-keepalive-pong-timeouts-are-healthy.md) relay
 keepalive that treats pong timeouts as healthy ·
 [0005](docs/adr/0005-jsonl-session-persistence-lazy-load.md) JSONL session
-persistence with lazy `session/load` resume.
+persistence with lazy `session/load` resume ·
+[0006](docs/adr/0006-daemon-direct-apns-push.md) daemon-direct APNs pushes
+for permission requests.
 
 ## Public relay
 
@@ -145,7 +147,7 @@ included: token auth, keepalive pings, per-IP rate limiting, and a room cap.
 | 1 | Daemon core, ACP integration, loopback transport | Complete |
 | 2 | Noise E2E channel, QR pairing, relay | Complete |
 | 3 | iOS app: pairing, dashboard, live transcript, approvals | Complete |
-| 4 | Push notifications, lock-screen approvals | Planned |
+| 4 | Push notifications, lock-screen approvals | Implemented — pending on-device verification |
 | 5 | PTY terminal, diff viewer, usage statistics, keep-alive (prevent the host machine from sleeping while sessions run or a phone is connected) | Planned |
 | 6 | Hardening, Android | Planned |
 

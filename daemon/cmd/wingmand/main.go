@@ -23,6 +23,7 @@ import (
 
 	"github.com/heisenberg-alt/wingman/daemon/internal/acp"
 	"github.com/heisenberg-alt/wingman/daemon/internal/pairing"
+	"github.com/heisenberg-alt/wingman/daemon/internal/push"
 	"github.com/heisenberg-alt/wingman/daemon/internal/session"
 	"github.com/heisenberg-alt/wingman/daemon/internal/transport"
 )
@@ -57,6 +58,7 @@ func usage() {
 Usage:
   wingmand serve   [--listen 127.0.0.1:7420] [--external :7421] [--relay URL]
                    [--home ~/.wingman] [--copilot copilot] [--perm-timeout 5m]
+                   [--apns-key key.p8 --apns-key-id ID --apns-team-id TEAM]
   wingmand pair    [--addr http://127.0.0.1:7420] [--json]
   wingmand devices [--home ~/.wingman] [list | remove <name>]
   wingmand doctor  [--copilot copilot]
@@ -80,6 +82,10 @@ func cmdServe(args []string) {
 	home := fs.String("home", defaultHome(), "state directory for keys and paired devices")
 	copilotPath := fs.String("copilot", "copilot", "path to the copilot binary")
 	permTimeout := fs.Duration("perm-timeout", 5*time.Minute, "fail-safe deny timeout for permission requests")
+	apnsKey := fs.String("apns-key", "", "path to the APNs .p8 auth key (push disabled if empty)")
+	apnsKeyID := fs.String("apns-key-id", "", "APNs auth key id")
+	apnsTeamID := fs.String("apns-team-id", "", "Apple developer team id")
+	apnsBundleID := fs.String("apns-bundle-id", "dev.wingman.Wingman", "iOS app bundle id (apns-topic)")
 	_ = fs.Parse(args)
 
 	logger := slog.New(slog.NewTextHandler(os.Stderr, nil))
@@ -96,15 +102,43 @@ func cmdServe(args []string) {
 	}
 	tokens := &pairing.Tokens{}
 
+	// Push notifications (Phase 4, ADR-0006): daemon → APNs directly.
+	var notifier *push.Notifier
+	var pushTokens *push.Registry
+	if *apnsKey != "" {
+		apns, err := push.NewAPNS(push.APNSConfig{
+			KeyPath:  *apnsKey,
+			KeyID:    *apnsKeyID,
+			TeamID:   *apnsTeamID,
+			BundleID: *apnsBundleID,
+		})
+		if err != nil {
+			logger.Error("configure APNs", "err", err)
+			os.Exit(1)
+		}
+		pushTokens, err = push.LoadTokens(filepath.Join(*home, "push.json"))
+		if err != nil {
+			logger.Error("load push tokens", "err", err)
+			os.Exit(1)
+		}
+		notifier = &push.Notifier{APNS: apns, Tokens: pushTokens, Logger: logger}
+		logger.Info("push notifications enabled", "devices", len(pushTokens.List()))
+	}
+
 	mgr := session.NewManager(session.Config{
 		CopilotPath:       *copilotPath,
 		PermissionTimeout: *permTimeout,
 		StateDir:          *home,
 		Logger:            logger,
+		OnPermissionRequest: func(sessionID, requestID, title string, optionIDs []string) {
+			if notifier != nil {
+				notifier.PermissionRequested(sessionID, requestID, title, optionIDs)
+			}
+		},
 	})
 	defer mgr.CloseAll()
 
-	srv := &transport.Server{Manager: mgr}
+	srv := &transport.Server{Manager: mgr, PushTokens: pushTokens}
 	secure := &transport.SecureServer{
 		Server:   srv,
 		Static:   static,

@@ -16,6 +16,7 @@ public enum Proto {
     public static let cmdDirsList = "dirs.list"
     public static let cmdPairRequest = "pair.request"
     public static let cmdPairRemove = "pair.remove"
+    public static let cmdPushRegister = "push.register"
 
     // Events (daemon → phone).
     public static let typeRes = "res"
@@ -98,6 +99,17 @@ public struct PairRequest: Codable, Sendable {
     public var deviceName: String
     public init(token: String, deviceName: String) {
         self.token = token
+        self.deviceName = deviceName
+    }
+}
+
+public struct PushRegister: Codable, Sendable {
+    public var token: String
+    public var env: String // "production" | "sandbox"
+    public var deviceName: String?
+    public init(token: String, env: String, deviceName: String?) {
+        self.token = token
+        self.env = env
         self.deviceName = deviceName
     }
 }

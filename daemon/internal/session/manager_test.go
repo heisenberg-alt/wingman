@@ -417,3 +417,46 @@ func TestRetentionPrunesOldestSessions(t *testing.T) {
 		}
 	}
 }
+
+func TestPermissionRequestTriggersNotifyHook(t *testing.T) {
+	type notification struct {
+		sessionID, requestID, title string
+		optionIDs                   []string
+	}
+	got := make(chan notification, 1)
+
+	m := session.NewManager(session.Config{
+		CopilotPath:       acptest.Build(t),
+		PermissionTimeout: time.Minute,
+		Logger:            slog.New(slog.NewTextHandler(io.Discard, nil)),
+		OnPermissionRequest: func(sessionID, requestID, title string, optionIDs []string) {
+			got <- notification{sessionID, requestID, title, optionIDs}
+		},
+	})
+	t.Cleanup(m.CloseAll)
+
+	s, err := m.Create(context.Background(), t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.SendPrompt("NEEDPERM write a file"); err != nil {
+		t.Fatal(err)
+	}
+
+	select {
+	case n := <-got:
+		if n.sessionID != s.ID || n.title != "Create file" || len(n.optionIDs) != 2 {
+			t.Errorf("notification = %+v", n)
+		}
+		// The hook's requestID matches the logged permission.request.
+		reqEvt := waitEvent(t, s.Log, proto.EvtPermissionRequest, 5*time.Second)
+		var req proto.PermissionRequest
+		_ = json.Unmarshal(reqEvt.Payload, &req)
+		if n.requestID != req.RequestID {
+			t.Errorf("hook requestID = %q, log has %q", n.requestID, req.RequestID)
+		}
+		_ = s.Approve(req.RequestID, "reject_once")
+	case <-time.After(10 * time.Second):
+		t.Fatal("permission hook never fired")
+	}
+}

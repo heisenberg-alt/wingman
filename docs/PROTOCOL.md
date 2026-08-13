@@ -62,6 +62,7 @@ All messages are JSON objects with a common envelope:
 | `session.unwatch` | – | `{}` |
 | `session.remove` | – | `{}` — rejected while a turn is running or awaiting permission |
 | `dirs.list` | – | `{ dirs: [string] }` — recent working directories, most recent first |
+| `push.register` | `{ token, env, deviceName? }` | `{}` — registers the device's APNs token (`env`: `sandbox` · `production`); errors if the daemon has no APNs key configured |
 
 Every command receives exactly one reply:
 
@@ -85,7 +86,8 @@ Every command receives exactly one reply:
 1. Copilot CLI issues an ACP `session/request_permission`; the daemon holds the
    JSON-RPC call open.
 2. Daemon appends `permission.request`, sets state `awaiting_permission`, and
-   (Phase 4) triggers a push notification.
+   (when APNs is configured) pushes a time-sensitive notification to every
+   registered device with Approve/Deny lock-screen actions (ADR-0006).
 3. Phone answers with `session.approve { requestId, optionId }`, where
    `optionId` is one of the offered options (`allow_once`, `allow_always`,
    `reject_once`, … as provided by the CLI).

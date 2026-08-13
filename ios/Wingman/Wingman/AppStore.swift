@@ -71,6 +71,26 @@ final class AppStore: ObservableObject {
             }
         }
         pathMonitor.start(queue: .main)
+
+        // Push plumbing (Phase 4): register fresh APNs tokens with the
+        // daemon, and answer approvals taken from the lock screen.
+        PushCoordinator.shared.onToken = { [weak self] token in
+            Task { @MainActor [weak self] in
+                await self?.registerPushToken(token)
+            }
+        }
+        PushCoordinator.shared.onApproval = { [weak self] sessionID, requestID, optionID in
+            Task { @MainActor [weak self] in
+                await self?.approveFromNotification(
+                    sessionID: sessionID, requestID: requestID, optionID: optionID)
+            }
+        }
+        PushCoordinator.shared.onOpenSession = { [weak self] _ in
+            Task { @MainActor [weak self] in
+                await self?.connect()
+                await self?.refreshSessions()
+            }
+        }
     }
 
     deinit {
@@ -188,14 +208,47 @@ final class AppStore: ObservableObject {
                 self.scheduleReconnect()
             }
         }
-        // Until push notifications (Phase 4), keep the dashboard fresh by
-        // polling the session list.
+        // Push keeps approvals timely in the background; polling still keeps
+        // the foreground dashboard fresh between events.
         refreshTask?.cancel()
         refreshTask = Task { [weak self] in
             while !Task.isCancelled {
                 try? await Task.sleep(for: .seconds(4))
                 await self?.refreshSessions()
             }
+        }
+        // Ask for notification permission and (re-)register our APNs token
+        // now that the daemon is reachable.
+        PushCoordinator.shared.activate()
+        if let token = PushCoordinator.shared.deviceToken {
+            Task { [weak self] in await self?.registerPushToken(token) }
+        }
+    }
+
+    /// Sends the APNs token to the daemon. Harmless if push isn't configured
+    /// there; registration is idempotent per token.
+    private func registerPushToken(_ token: String) async {
+        guard let client, let config else { return }
+        #if DEBUG
+        let env = "sandbox"
+        #else
+        let env = "production"
+        #endif
+        try? await client.registerPush(token: token, env: env, deviceName: config.deviceName)
+    }
+
+    /// Answers a permission request from a lock-screen notification action,
+    /// connecting first if iOS launched us in the background.
+    private func approveFromNotification(sessionID: String, requestID: String, optionID: String) async {
+        if client == nil {
+            await connect()
+        }
+        guard let client else { return }
+        do {
+            try await client.approve(sessionID: sessionID, requestID: requestID, optionID: optionID)
+            pendingPermissions.removeValue(forKey: sessionID)
+        } catch {
+            lastError = "Approval failed: \(error.localizedDescription)"
         }
     }
 

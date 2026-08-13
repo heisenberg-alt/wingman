@@ -1,7 +1,18 @@
 import SwiftUI
 
+/// Receives the APNs device token; everything else rides PushCoordinator.
+final class AppDelegate: NSObject, UIApplicationDelegate {
+    func application(
+        _ application: UIApplication,
+        didRegisterForRemoteNotificationsWithDeviceToken deviceToken: Data
+    ) {
+        PushCoordinator.shared.tokenReceived(deviceToken)
+    }
+}
+
 @main
 struct WingmanApp: App {
+    @UIApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
     @StateObject private var store = AppStore()
 
     var body: some Scene {
