@@ -49,6 +49,9 @@ func (s *Server) Handler() http.Handler {
 // pairing tokens via POST /pair, so it must never serve remote peers — even
 // if --listen is pointed at a non-loopback address.
 func RequireLoopback(logger *slog.Logger, next http.Handler) http.Handler {
+	if logger == nil {
+		logger = slog.Default()
+	}
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		host, _, err := net.SplitHostPort(r.RemoteAddr)
 		if err != nil || !net.ParseIP(host).IsLoopback() {
