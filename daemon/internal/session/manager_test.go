@@ -140,6 +140,9 @@ func TestPermissionTimeoutFailsSafeToDeny(t *testing.T) {
 		t.Errorf("resolvedBy = %q, want timeout", res.ResolvedBy)
 	}
 	waitEvent(t, s.Log, proto.EvtTurnEnded, 10*time.Second)
+	// The denied turn is over; the session must settle at idle, not be
+	// stranded at running by the permission handler's exit path.
+	waitStatus(t, s, session.StatusIdle, 5*time.Second)
 }
 
 func TestBusySessionRejectsSecondPrompt(t *testing.T) {

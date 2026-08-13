@@ -35,7 +35,6 @@ All messages are JSON objects with a common envelope:
   "payload": { }
 }
 ```
-| `pair.request` | `{ token, deviceName }` | `{}` — only valid as the first message from an unpaired device |
 
 - `id` correlates a command with its `res` reply.
 - `seq` is a per-session monotonically increasing sequence number assigned by
@@ -47,6 +46,7 @@ All messages are JSON objects with a common envelope:
 
 | type | payload | reply data |
 |---|---|---|
+| `pair.request` | `{ token, deviceName }` | `{}` — only valid as the first message from an unpaired device |
 | `session.list` | – | `{ sessions: [SessionInfo] }` |
 | `session.create` | `{ cwd, prompt? }` | `SessionInfo` |
 | `session.prompt` | `{ text }` | `{}` (progress arrives as events) |
@@ -54,6 +54,8 @@ All messages are JSON objects with a common envelope:
 | `session.cancel` | – | `{}` |
 | `session.watch` | `{ fromSeq }` | `{}` then event stream |
 | `session.unwatch` | – | `{}` |
+| `session.remove` | – | `{}` — only sessions in a terminal state (`done`, `error`) |
+| `dirs.list` | – | `{ dirs: [string] }` — recent working directories, most recent first |
 
 Every command receives exactly one reply:
 
@@ -90,6 +92,31 @@ Every command receives exactly one reply:
 Session ids in this protocol are daemon-generated and stable across daemon
 restarts (Phase 2+, backed by `session/load`). The underlying ACP session id is
 an implementation detail and never leaves the daemon.
+
+## Relay rendezvous
+
+The relay never speaks the message protocol above — it pipes opaque
+WebSocket frames between exactly one host (daemon) and one client (phone)
+per room. Its own surface is two WebSocket endpoints:
+
+| endpoint | who connects | query params |
+|---|---|---|
+| `/v1/host` | daemon | `room`, `token?` |
+| `/v1/join` | phone | `room`, `token?` |
+
+- `room` is derived from the daemon's static public key:
+  `base64url(sha256(pub)[:12])`, so it is stable across restarts and both
+  ends compute it independently from the pairing payload.
+- `token`, when the relay is started with one, is a bearer token compared in
+  constant time; it is distributed to phones inside the QR pairing payload
+  (`relayToken`).
+- A host connection parks until a client joins; a reconnecting host replaces
+  any stale one for the same room. Joining claims the room (one client at a
+  time). When either side disconnects, the relay tears the pair down and the
+  daemon redials.
+- The relay pings both parked and in-session connections to keep proxy
+  connections alive; see ADR-0004 for why an unanswered pong is not treated
+  as a dead connection.
 
 ## Versioning
 

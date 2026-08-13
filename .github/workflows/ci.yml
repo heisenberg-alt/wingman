@@ -1,0 +1,41 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  go:
+    name: go (${{ matrix.module }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module: [daemon, relay]
+    defaults:
+      run:
+        working-directory: ${{ matrix.module }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: ${{ matrix.module }}/go.mod
+          cache-dependency-path: ${{ matrix.module }}/go.sum
+      - run: go vet ./...
+      - run: go test ./... -count=1 -race
+
+  swift:
+    name: swift (WingmanKit)
+    runs-on: macos-15
+    defaults:
+      run:
+        working-directory: ios/WingmanKit
+    steps:
+      - uses: actions/checkout@v4
+      # LiveInteropTests needs a running daemon (WINGMAN_INTEROP_PAYLOAD) and
+      # no-ops here; the Noise/protocol tests run fully.
+      - run: swift test

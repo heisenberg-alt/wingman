@@ -287,3 +287,4 @@ func TestDirsListAndSessionRemove(t *testing.T) {
 			t.Fatalf("session still present after Remove")
 		}
 	}
+}

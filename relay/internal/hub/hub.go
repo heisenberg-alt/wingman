@@ -10,6 +10,7 @@ package hub
 import (
 	"context"
 	"crypto/subtle"
+	"errors"
 	"log/slog"
 	"net"
 	"net/http"
@@ -26,9 +27,12 @@ type Config struct {
 	Token string
 	// MaxRooms caps concurrently hosted rooms. Default 128.
 	MaxRooms int
-	// PingInterval is the keepalive cadence on parked host connections,
-	// which also detects dead hosts. Default 30s.
+	// PingInterval is the keepalive cadence on parked host connections and
+	// active sessions, which also detects dead hosts. Default 30s.
 	PingInterval time.Duration
+	// PingTimeout bounds how long a keepalive ping waits for its pong before
+	// giving up. Default 10s.
+	PingTimeout time.Duration
 	// PerIPPerMinute limits new connections per client IP. Default 60.
 	PerIPPerMinute int
 }
@@ -73,6 +77,9 @@ func New(logger *slog.Logger, cfg Config) *Hub {
 	}
 	if cfg.PingInterval <= 0 {
 		cfg.PingInterval = 30 * time.Second
+	}
+	if cfg.PingTimeout <= 0 {
+		cfg.PingTimeout = 10 * time.Second
 	}
 	if cfg.PerIPPerMinute <= 0 {
 		cfg.PerIPPerMinute = 60
@@ -204,10 +211,18 @@ func (h *Hub) handleHost(w http.ResponseWriter, r *http.Request) {
 			case <-rm.done:
 				return
 			case <-ticker.C:
-				pingCtx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+				// Nothing reads a parked host connection, and coder/websocket
+				// only surfaces pongs to Ping during a concurrent Read — so a
+				// pong confirmation can never arrive here. The ping still
+				// matters: it keeps proxy connections open (the daemon's
+				// auto-pong makes traffic bidirectional). Treat a pong
+				// deadline as healthy; tear down only if the ping cannot be
+				// written at all. Truly dead hosts are reaped when the daemon
+				// redials and replaces the room.
+				pingCtx, cancel := context.WithTimeout(context.Background(), h.cfg.PingTimeout)
 				err := conn.Ping(pingCtx)
 				cancel()
-				if err != nil {
+				if err != nil && !errors.Is(err, context.DeadlineExceeded) {
 					h.logger.Info("host keepalive failed", "room", roomID)
 					rm.teardown()
 					return
@@ -267,6 +282,39 @@ func (h *Hub) handleJoin(w http.ResponseWriter, r *http.Request) {
 	wg.Add(2)
 	go pump(ctx, cancel, &wg, rm.host, client)
 	go pump(ctx, cancel, &wg, client, rm.host)
+
+	// Keepalive during the active session: an idle session sends no frames,
+	// and proxies (Fly) drop connections that stay silent. Unlike the parked
+	// case, both connections have concurrent Reads (the pumps), so pongs can
+	// surface here — but a peer that is busy writing may answer late, so a
+	// pong deadline is still treated as healthy. Tear down only when a ping
+	// cannot be written; dead peers are otherwise caught by the pumps' Reads.
+	go func() {
+		ticker := time.NewTicker(h.cfg.PingInterval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ticker.C:
+				hostCtx, hostCancel := context.WithTimeout(ctx, h.cfg.PingTimeout)
+				errHost := rm.host.Ping(hostCtx)
+				hostCancel()
+
+				clientCtx, clientCancel := context.WithTimeout(ctx, h.cfg.PingTimeout)
+				errClient := client.Ping(clientCtx)
+				clientCancel()
+				for _, err := range []error{errHost, errClient} {
+					if err != nil && !errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil {
+						h.logger.Info("session keepalive failed", "room", roomID)
+						cancel()
+						return
+					}
+				}
+			}
+		}
+	}()
+
 	wg.Wait()
 
 	_ = client.Close(websocket.StatusNormalClosure, "")

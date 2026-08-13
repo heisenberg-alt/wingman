@@ -197,3 +197,86 @@ func TestClientLeaveTearsDownHostForRedial(t *testing.T) {
 		t.Fatalf("second cycle failed: %q %v", data, err)
 	}
 }
+
+func TestParkedHostSurvivesPongDeadline(t *testing.T) {
+	hts := newHubServerWith(t, Config{PingInterval: 25 * time.Millisecond, PingTimeout: 50 * time.Millisecond})
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	host := dialWS(t, hts, "/v1/host?room=park")
+
+	// A parked host has no concurrent Read, so no pong ever surfaces to the
+	// relay's Ping: every keepalive cycle ends in a pong deadline. Sit
+	// through several cycles; the room must survive them all.
+	time.Sleep(300 * time.Millisecond)
+
+	client := dialWS(t, hts, "/v1/join?room=park")
+	if err := client.Write(ctx, websocket.MessageBinary, []byte("still-here")); err != nil {
+		t.Fatal(err)
+	}
+	if _, data, err := host.Read(ctx); err != nil || string(data) != "still-here" {
+		t.Fatalf("piped data = %q, %v", data, err)
+	}
+}
+
+func TestParkedDeadHostIsReaped(t *testing.T) {
+	h := New(slog.New(slog.NewTextHandler(io.Discard, nil)), Config{
+		PingInterval:   25 * time.Millisecond,
+		PingTimeout:    50 * time.Millisecond,
+		PerIPPerMinute: 10000,
+	})
+	hts := httptest.NewServer(h.Handler())
+	t.Cleanup(hts.Close)
+
+	host := dialWS(t, hts, "/v1/host?room=dead")
+	// Kill the TCP connection without a close handshake: the next keepalive
+	// ping cannot be written, which must tear the room down.
+	_ = host.CloseNow()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for {
+		h.mu.Lock()
+		_, exists := h.rooms["dead"]
+		h.mu.Unlock()
+		if !exists {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("dead parked host was never reaped")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
+func TestIdleSessionSurvivesKeepalive(t *testing.T) {
+	hts := newHubServerWith(t, Config{PingInterval: 25 * time.Millisecond, PingTimeout: 50 * time.Millisecond})
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+
+	host := dialWS(t, hts, "/v1/host?room=idle")
+	client := dialWS(t, hts, "/v1/join?room=idle")
+
+	// The host reads concurrently (as the daemon does), so it auto-answers
+	// session keepalive pings; the client does not read, so its pings end in
+	// pong deadlines — which must also be treated as healthy.
+	hostGot := make(chan []byte, 1)
+	go func() {
+		if _, data, err := host.Read(ctx); err == nil {
+			hostGot <- data
+		}
+	}()
+
+	// Idle through several keepalive cycles, then verify the pipe still works.
+	time.Sleep(300 * time.Millisecond)
+	if err := client.Write(ctx, websocket.MessageBinary, []byte("after-idle")); err != nil {
+		t.Fatal(err)
+	}
+	select {
+	case data := <-hostGot:
+		if string(data) != "after-idle" {
+			t.Fatalf("host received %q", data)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("message not piped after idle period")
+	}
+}
