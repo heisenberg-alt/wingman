@@ -20,6 +20,7 @@ transport, and the iOS app work end to end against real Copilot CLI sessions
 
 - List sessions with live status
 - Stream transcripts in real time and send follow-up prompts
+- Sessions survive daemon restarts: transcripts persist and conversations resume where they left off
 - Approve or deny tool-use permission requests remotely
 - Start new sessions in trusted directories
 - Raw terminal access and diff review *(Phase 5)*
@@ -108,7 +109,9 @@ log with client-driven replay ·
 [0003](docs/adr/0003-fail-safe-deny-on-permission-timeout.md) fail-safe deny
 for unanswered permission requests ·
 [0004](docs/adr/0004-relay-keepalive-pong-timeouts-are-healthy.md) relay
-keepalive that treats pong timeouts as healthy.
+keepalive that treats pong timeouts as healthy ·
+[0005](docs/adr/0005-jsonl-session-persistence-lazy-load.md) JSONL session
+persistence with lazy `session/load` resume.
 
 ## Public relay
 

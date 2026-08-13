@@ -10,3 +10,4 @@ made during Phases 0–2 and were written down retrospectively in August 2026.
 | [0002](0002-seq-numbered-event-log-replay.md) | Sequence-numbered session event log with client-driven replay |
 | [0003](0003-fail-safe-deny-on-permission-timeout.md) | Fail-safe deny for unanswered permission requests |
 | [0004](0004-relay-keepalive-pong-timeouts-are-healthy.md) | Treat pong timeouts on relay-parked hosts as healthy |
+| [0005](0005-jsonl-session-persistence-lazy-load.md) | JSONL session persistence with lazy session/load resume |
