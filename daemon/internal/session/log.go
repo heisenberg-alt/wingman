@@ -104,7 +104,11 @@ func (l *Log) Append(evtType string, payload any) Event {
 	l.events = append(l.events, evt)
 	if l.file != nil {
 		line, _ := json.Marshal(evt)
-		_, _ = l.file.Write(append(line, '\n'))
+		buf := append(line, '\n')
+		if n, err := l.file.Write(buf); err != nil || n != len(buf) {
+			_ = l.file.Close()
+			l.file = nil
+		}
 	}
 	for _, ch := range l.subs {
 		select {
