@@ -18,7 +18,7 @@ transport, and the iOS app work end to end against real Copilot CLI sessions
 
 ### Capabilities
 
-- List sessions across machines with live status
+- List sessions with live status
 - Stream transcripts in real time and send follow-up prompts
 - Approve or deny tool-use permission requests remotely
 - Start new sessions in trusted directories
@@ -106,7 +106,9 @@ encryption over a zero-knowledge relay ·
 [0002](docs/adr/0002-seq-numbered-event-log-replay.md) sequence-numbered event
 log with client-driven replay ·
 [0003](docs/adr/0003-fail-safe-deny-on-permission-timeout.md) fail-safe deny
-for unanswered permission requests.
+for unanswered permission requests ·
+[0004](docs/adr/0004-relay-keepalive-pong-timeouts-are-healthy.md) relay
+keepalive that treats pong timeouts as healthy.
 
 ## Public relay
 
