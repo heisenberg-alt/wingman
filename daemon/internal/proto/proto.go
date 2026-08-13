@@ -32,6 +32,7 @@ const (
 	CmdSessionRemove  = "session.remove"
 	CmdDirsList       = "dirs.list"
 	CmdPairRequest    = "pair.request"
+	CmdPairRemove     = "pair.remove"
 )
 
 // Event types (daemon → phone).

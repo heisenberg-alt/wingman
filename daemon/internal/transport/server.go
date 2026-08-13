@@ -7,7 +7,10 @@ package transport
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"log/slog"
+	"net"
 	"net/http"
 	"sync"
 
@@ -41,14 +44,42 @@ func (s *Server) Handler() http.Handler {
 	return mux
 }
 
+// RequireLoopback rejects requests whose peer address is not loopback. The
+// daemon's loopback listener carries the protocol without Noise and mints
+// pairing tokens via POST /pair, so it must never serve remote peers — even
+// if --listen is pointed at a non-loopback address.
+func RequireLoopback(logger *slog.Logger, next http.Handler) http.Handler {
+	if logger == nil {
+		logger = slog.Default()
+	}
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		host, _, err := net.SplitHostPort(r.RemoteAddr)
+		if err != nil || !net.ParseIP(host).IsLoopback() {
+			logger.Warn("rejected non-loopback request to loopback listener",
+				"remote", r.RemoteAddr, "path", r.URL.Path)
+			http.Error(w, "forbidden: loopback only", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+
 // ServeConn runs the protocol loop over mc until the connection closes. It
 // closes mc before returning. Commands are dispatched on their own goroutines
 // so a slow operation (e.g. session.create spawning a subprocess) cannot
 // block permission approvals arriving on the same connection.
 func (s *Server) ServeConn(ctx context.Context, mc securechan.MessageConn) {
+	s.ServePeer(ctx, mc, nil)
+}
+
+// ServePeer is ServeConn for connections with a paired-device identity:
+// unpair, when non-nil, revokes the peer's pairing and is invoked when the
+// peer sends pair.remove.
+func (s *Server) ServePeer(ctx context.Context, mc securechan.MessageConn, unpair func() error) {
 	c := &client{
 		srv:     s,
 		mc:      mc,
+		unpair:  unpair,
 		watches: make(map[string]func()),
 	}
 	defer c.close()
@@ -66,8 +97,9 @@ func (s *Server) ServeConn(ctx context.Context, mc securechan.MessageConn) {
 }
 
 type client struct {
-	srv *Server
-	mc  securechan.MessageConn
+	srv    *Server
+	mc     securechan.MessageConn
+	unpair func() error // nil when the connection has no paired identity
 
 	writeMu sync.Mutex
 
@@ -165,6 +197,17 @@ func (c *client) handle(ctx context.Context, env proto.Envelope) {
 
 	case proto.CmdDirsList:
 		c.reply(ctx, env, proto.DirsList{Dirs: c.srv.Manager.RecentDirs()}, nil)
+
+	case proto.CmdPairRemove:
+		if c.unpair == nil {
+			c.reply(ctx, env, nil, errors.New("pair.remove is only valid on a paired connection"))
+			return
+		}
+		err := c.unpair()
+		c.reply(ctx, env, nil, err)
+		if err == nil {
+			c.close() // the peer is no longer authorized; end the connection
+		}
 
 	default:
 		c.reply(ctx, env, nil, fmt.Errorf("unknown command %q", env.Type))

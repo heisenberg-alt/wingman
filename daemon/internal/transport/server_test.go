@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"io"
 	"log/slog"
+	"net/http"
 	"net/http/httptest"
 	"strconv"
 	"strings"
@@ -254,6 +255,39 @@ func TestDirsListAndSessionRemove(t *testing.T) {
 	for _, s := range list.Sessions {
 		if s.ID == info.ID {
 			t.Fatalf("session still present after Remove")
+		}
+	}
+}
+
+func TestPairRemoveRejectedWithoutPairedIdentity(t *testing.T) {
+	_, hts := newServer(t)
+	c := dial(t, hts)
+
+	// Loopback connections carry no paired-device identity.
+	if res := c.call(proto.CmdPairRemove, "", nil); res.OK {
+		t.Error("pair.remove succeeded on a loopback connection")
+	}
+}
+
+func TestRequireLoopbackRejectsRemotePeers(t *testing.T) {
+	logger := slog.New(slog.NewTextHandler(io.Discard, nil))
+	inner := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	})
+	h := transport.RequireLoopback(logger, inner)
+
+	for remote, wantCode := range map[string]int{
+		"127.0.0.1:5555":   http.StatusOK,
+		"[::1]:5555":       http.StatusOK,
+		"203.0.113.9:5555": http.StatusForbidden,
+		"192.168.1.20:80":  http.StatusForbidden,
+	} {
+		req := httptest.NewRequest("POST", "/pair", nil)
+		req.RemoteAddr = remote
+		rec := httptest.NewRecorder()
+		h.ServeHTTP(rec, req)
+		if rec.Code != wantCode {
+			t.Errorf("remote %s: status = %d, want %d", remote, rec.Code, wantCode)
 		}
 	}
 }

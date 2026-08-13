@@ -39,6 +39,8 @@ func main() {
 		cmdServe(os.Args[2:])
 	case "pair":
 		cmdPair(os.Args[2:])
+	case "devices":
+		cmdDevices(os.Args[2:])
 	case "doctor":
 		cmdDoctor(os.Args[2:])
 	case "version":
@@ -56,6 +58,7 @@ Usage:
   wingmand serve   [--listen 127.0.0.1:7420] [--external :7421] [--relay URL]
                    [--home ~/.wingman] [--copilot copilot] [--perm-timeout 5m]
   wingmand pair    [--addr http://127.0.0.1:7420] [--json]
+  wingmand devices [--home ~/.wingman] [list | remove <name>]
   wingmand doctor  [--copilot copilot]
   wingmand version`)
 }
@@ -132,7 +135,7 @@ func cmdServe(args []string) {
 		w.Header().Set("Content-Type", "application/json")
 		_ = json.NewEncoder(w).Encode(payload)
 	})
-	loopback := &http.Server{Addr: *listen, Handler: adminMux}
+	loopback := &http.Server{Addr: *listen, Handler: transport.RequireLoopback(logger, adminMux)}
 	go shutdownOnDone(ctx, loopback)
 
 	// External Noise-secured listener.
@@ -236,6 +239,50 @@ func cmdPair(args []string) {
 	qrterminal.GenerateHalfBlock(payload, qrterminal.L, os.Stdout)
 	fmt.Println()
 	fmt.Println(payload)
+}
+
+// cmdDevices lists or revokes paired devices by editing devices.json. A
+// running daemon picks changes up on its next start; phones can also revoke
+// themselves live with the pair.remove protocol command.
+func cmdDevices(args []string) {
+	fs := flag.NewFlagSet("devices", flag.ExitOnError)
+	home := fs.String("home", defaultHome(), "state directory for keys and paired devices")
+	_ = fs.Parse(args)
+	rest := fs.Args()
+
+	registry, err := pairing.LoadRegistry(filepath.Join(*home, "devices.json"))
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "error:", err)
+		os.Exit(1)
+	}
+
+	switch {
+	case len(rest) == 0 || (rest[0] == "list" && len(rest) == 1):
+		devices := registry.List()
+		if len(devices) == 0 {
+			fmt.Println("no paired devices")
+			return
+		}
+		for _, d := range devices {
+			fmt.Printf("%-24s paired %s\n", d.Name, d.AddedAt.Format(time.RFC3339))
+		}
+
+	case rest[0] == "remove" && len(rest) == 2:
+		removed, err := registry.RemoveByName(rest[1])
+		if err != nil {
+			fmt.Fprintln(os.Stderr, "error:", err)
+			os.Exit(1)
+		}
+		if !removed {
+			fmt.Fprintf(os.Stderr, "error: no paired device named %q\n", rest[1])
+			os.Exit(1)
+		}
+		fmt.Printf("removed %q; restart wingmand for a running daemon to forget it\n", rest[1])
+
+	default:
+		fmt.Fprintln(os.Stderr, "usage: wingmand devices [--home ~/.wingman] [list | remove <name>]")
+		os.Exit(2)
+	}
 }
 
 // cmdDoctor probes the installed copilot binary's ACP server.

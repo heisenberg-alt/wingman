@@ -23,6 +23,11 @@ listener on `127.0.0.1` carries the same messages without the Noise layer.
 If no paired device answers a permission request, it fails safe to deny after
 a configurable timeout (default 5 minutes).
 
+The daemon's loopback listener also exposes `POST /pair`, which mints the
+single-use token for `wingmand pair`. The entire loopback listener refuses
+non-loopback peers, so pointing `--listen` at a public address cannot expose
+token minting or the un-Noised protocol endpoint.
+
 All messages are JSON objects with a common envelope:
 
 ```json
@@ -47,6 +52,7 @@ All messages are JSON objects with a common envelope:
 | type | payload | reply data |
 |---|---|---|
 | `pair.request` | `{ token, deviceName }` | `{}` — only valid as the first message from an unpaired device |
+| `pair.remove` | – | `{}` — revokes this device's pairing; the daemon then closes the connection. Only valid on a paired (Noise) connection |
 | `session.list` | – | `{ sessions: [SessionInfo] }` |
 | `session.create` | `{ cwd, prompt? }` | `SessionInfo` |
 | `session.prompt` | `{ text }` | `{}` (progress arrives as events) |

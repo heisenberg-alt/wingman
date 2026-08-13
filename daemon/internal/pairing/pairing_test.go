@@ -126,3 +126,53 @@ func TestRoomIsStablePerKey(t *testing.T) {
 		t.Error("empty room id")
 	}
 }
+
+func TestRegistryRemoveAndList(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "devices.json")
+	r, err := LoadRegistry(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	keyA, _ := securechan.GenerateKey()
+	keyB, _ := securechan.GenerateKey()
+	if err := r.Add("phone-a", keyA.Public); err != nil {
+		t.Fatal(err)
+	}
+	if err := r.Add("phone-b", keyB.Public); err != nil {
+		t.Fatal(err)
+	}
+	if got := len(r.List()); got != 2 {
+		t.Fatalf("List = %d devices, want 2", got)
+	}
+
+	removed, err := r.Remove(keyA.Public)
+	if err != nil || !removed {
+		t.Fatalf("Remove = %v, %v; want true, nil", removed, err)
+	}
+	if r.IsAuthorized(keyA.Public) {
+		t.Error("removed device still authorized")
+	}
+	if !r.IsAuthorized(keyB.Public) {
+		t.Error("unrelated device lost authorization")
+	}
+
+	// Revocation persists across reloads.
+	r2, err := LoadRegistry(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if r2.IsAuthorized(keyA.Public) {
+		t.Error("removed device authorized after reload")
+	}
+
+	removed, err = r2.RemoveByName("phone-b")
+	if err != nil || !removed {
+		t.Fatalf("RemoveByName = %v, %v; want true, nil", removed, err)
+	}
+	if removed, _ = r2.RemoveByName("phone-b"); removed {
+		t.Error("second RemoveByName reported a removal")
+	}
+	if r2.Count() != 0 {
+		t.Errorf("Count = %d, want 0", r2.Count())
+	}
+}

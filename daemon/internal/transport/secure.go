@@ -61,7 +61,17 @@ func (ss *SecureServer) ServeConn(ctx context.Context, raw securechan.MessageCon
 			return true
 		}
 	}
-	ss.Server.ServeConn(ctx, sc)
+	peer := sc.PeerStatic()
+	ss.Server.ServePeer(ctx, sc, func() error {
+		removed, err := ss.Registry.Remove(peer)
+		if err != nil {
+			return err
+		}
+		if removed {
+			ss.Logger.Info("device unpaired", "remaining", ss.Registry.Count())
+		}
+		return nil
+	})
 	return true
 }
 
