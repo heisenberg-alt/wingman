@@ -111,6 +111,48 @@ func (r *Registry) Add(name string, pub []byte) error {
 		}
 	}
 	r.devices = append(r.devices, Device{Name: name, PublicKey: pub, AddedAt: time.Now().UTC()})
+	return r.save()
+}
+
+// Remove revokes the device with the given public key and persists the
+// registry. It reports whether a device was removed.
+func (r *Registry) Remove(pub []byte) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i, d := range r.devices {
+		if subtle.ConstantTimeCompare(d.PublicKey, pub) == 1 {
+			r.devices = append(r.devices[:i], r.devices[i+1:]...)
+			return true, r.save()
+		}
+	}
+	return false, nil
+}
+
+// RemoveByName revokes the device with the given name and persists the
+// registry. It reports whether a device was removed.
+func (r *Registry) RemoveByName(name string) (bool, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	for i, d := range r.devices {
+		if d.Name == name {
+			r.devices = append(r.devices[:i], r.devices[i+1:]...)
+			return true, r.save()
+		}
+	}
+	return false, nil
+}
+
+// List returns a snapshot of the paired devices.
+func (r *Registry) List() []Device {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	out := make([]Device, len(r.devices))
+	copy(out, r.devices)
+	return out
+}
+
+// save persists the registry; the caller holds r.mu.
+func (r *Registry) save() error {
 	data, err := json.MarshalIndent(r.devices, "", "  ")
 	if err != nil {
 		return err

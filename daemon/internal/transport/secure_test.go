@@ -180,3 +180,24 @@ func TestPairedDeviceSkipsGate(t *testing.T) {
 		t.Errorf("paired device list failed: %s", res.Error)
 	}
 }
+
+func TestPairRemoveRevokesDevice(t *testing.T) {
+	ss, registry, tokens, daemonPub := newSecureServer(t)
+	token := tokens.Issue(time.Minute)
+
+	sc, clientPub := connectSecure(t, ss, daemonPub)
+	c := newTestClient(t, sc)
+	if res := c.call(proto.CmdPairRequest, "", proto.PairRequest{Token: token, DeviceName: "phone"}); !res.OK {
+		t.Fatalf("pairing failed: %s", res.Error)
+	}
+	if !registry.IsAuthorized(clientPub) {
+		t.Fatal("client not registered after pairing")
+	}
+
+	if res := c.call(proto.CmdPairRemove, "", nil); !res.OK {
+		t.Fatalf("pair.remove failed: %s", res.Error)
+	}
+	if registry.IsAuthorized(clientPub) {
+		t.Error("device still authorized after pair.remove")
+	}
+}

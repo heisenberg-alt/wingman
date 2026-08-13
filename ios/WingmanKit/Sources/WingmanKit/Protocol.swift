@@ -15,6 +15,7 @@ public enum Proto {
     public static let cmdSessionRemove = "session.remove"
     public static let cmdDirsList = "dirs.list"
     public static let cmdPairRequest = "pair.request"
+    public static let cmdPairRemove = "pair.remove"
 
     // Events (daemon → phone).
     public static let typeRes = "res"

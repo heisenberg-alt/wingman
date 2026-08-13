@@ -29,11 +29,13 @@ transport, and the iOS app work end to end against real Copilot CLI sessions
 
 - **End-to-end encryption.** Phone-to-daemon traffic is carried inside a Noise XX channel (X25519, ChaCha20-Poly1305). The relay routes opaque ciphertext by rendezvous ID and cannot read payloads.
 - **Credentials stay local.** Copilot CLI retains its own GitHub authentication on the development machine. No GitHub tokens transit the relay.
-- **Explicit device pairing.** Devices pair once by scanning a QR code printed in the terminal. Keys are stored in the iOS Keychain and in `~/.wingman/keys`.
+- **Explicit device pairing.** Devices pair once by scanning a QR code printed in the terminal. Keys are stored in the iOS Keychain and in `~/.wingman/keys`. Unpairing in the app revokes the device's key on the daemon (`pair.remove`); `wingmand devices` lists and revokes devices from the host.
 - **Fail-safe approvals.** If no paired device responds, pending permission requests are denied after a configurable timeout (default: 5 minutes).
 - **Loopback by default.** The daemon listens on `127.0.0.1` unless an
   external listener is enabled with `--external`; remote access always rides
-  the Noise channel, over LAN or relay.
+  the Noise channel, over LAN or relay. The loopback listener (plain protocol
+  + pairing-token endpoint) refuses non-loopback peers even if `--listen` is
+  pointed at a public address.
 
 ## Repository layout
 

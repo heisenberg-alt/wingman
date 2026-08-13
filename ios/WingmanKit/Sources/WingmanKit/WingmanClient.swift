@@ -100,6 +100,12 @@ public actor WingmanClient {
         _ = try await call(Proto.cmdPairRequest, payload: PairRequest(token: token, deviceName: deviceName))
     }
 
+    /// Revokes this device's pairing on the daemon. The daemon closes the
+    /// connection after replying.
+    public func unpair() async throws {
+        _ = try await call(Proto.cmdPairRemove)
+    }
+
     public func listSessions() async throws -> [SessionInfo] {
         let result = try await call(Proto.cmdSessionList)
         guard let data = result.data else { throw ClientError.badReply }

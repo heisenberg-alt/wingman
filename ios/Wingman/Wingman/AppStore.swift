@@ -108,7 +108,13 @@ final class AppStore: ObservableObject {
         pumpTask?.cancel()
         refreshTask?.cancel()
         reconnectTask?.cancel()
-        Task { await client?.disconnect() }
+        // Best-effort revocation on the daemon before dropping local state:
+        // without it the daemon would trust this device's key forever.
+        let departing = client
+        Task {
+            try? await departing?.unpair()
+            await departing?.disconnect()
+        }
         client = nil
         Keychain.deleteConfig()
         config = nil
