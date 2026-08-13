@@ -297,10 +297,13 @@ func (h *Hub) handleJoin(w http.ResponseWriter, r *http.Request) {
 			case <-ctx.Done():
 				return
 			case <-ticker.C:
-				pingCtx, pingCancel := context.WithTimeout(ctx, h.cfg.PingTimeout)
-				errHost := rm.host.Ping(pingCtx)
-				errClient := client.Ping(pingCtx)
-				pingCancel()
+				hostCtx, hostCancel := context.WithTimeout(ctx, h.cfg.PingTimeout)
+				errHost := rm.host.Ping(hostCtx)
+				hostCancel()
+
+				clientCtx, clientCancel := context.WithTimeout(ctx, h.cfg.PingTimeout)
+				errClient := client.Ping(clientCtx)
+				clientCancel()
 				for _, err := range []error{errHost, errClient} {
 					if err != nil && !errors.Is(err, context.DeadlineExceeded) && ctx.Err() == nil {
 						h.logger.Info("session keepalive failed", "room", roomID)
