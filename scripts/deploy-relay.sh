@@ -13,7 +13,7 @@ command -v fly >/dev/null || { echo "error: install flyctl first: brew install f
 # Exact-match the app name; a prefix grep would confuse e.g. "wingman-relay"
 # with "wingman-relay-foo".
 app_exists() {
-  fly apps list 2>/dev/null | awk '{print $1}' | grep -qx "$APP"
+  fly apps list 2>/dev/null | awk '{print $1}' | grep -Fqx -- "$APP"
 }
 
 # Generate a relay auth token only for a new app or one without a token.
