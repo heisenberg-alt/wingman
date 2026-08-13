@@ -121,6 +121,9 @@ func (m *Manager) restoreSession(dir string) (*Session, error) {
 	if mt.ID == "" || mt.AcpID == "" {
 		return nil, fmt.Errorf("meta.json: missing id or acpId")
 	}
+	if mt.ID != filepath.Base(dir) {
+		return nil, fmt.Errorf("meta.json: id %q does not match dir %q", mt.ID, filepath.Base(dir))
+	}
 	log, err := OpenLog(filepath.Join(dir, "log.jsonl"))
 	if err != nil {
 		return nil, err
