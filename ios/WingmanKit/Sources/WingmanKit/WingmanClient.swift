@@ -106,6 +106,11 @@ public actor WingmanClient {
         _ = try await call(Proto.cmdPairRemove)
     }
 
+    /// Registers this device's APNs token for permission-request alerts.
+    public func registerPush(token: String, env: String, deviceName: String?) async throws {
+        _ = try await call(Proto.cmdPushRegister, payload: PushRegister(token: token, env: env, deviceName: deviceName))
+    }
+
     public func listSessions() async throws -> [SessionInfo] {
         let result = try await call(Proto.cmdSessionList)
         guard let data = result.data else { throw ClientError.badReply }

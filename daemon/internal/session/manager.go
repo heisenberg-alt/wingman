@@ -40,7 +40,11 @@ type Config struct {
 	PermissionTimeout time.Duration
 	// StateDir, when set, persists recent working directories there.
 	StateDir string
-	Logger   *slog.Logger
+	// OnPermissionRequest, when set, is invoked (on its own goroutine) each
+	// time a session appends a permission.request — the Phase 4 push
+	// notification trigger.
+	OnPermissionRequest func(sessionID, requestID, title string, optionIDs []string)
+	Logger              *slog.Logger
 }
 
 // Manager owns all sessions in this daemon.
@@ -539,6 +543,13 @@ func (s *Session) onRequest(ctx context.Context, method string, params json.RawM
 		ToolCall:  req.ToolCall,
 		Options:   options,
 	})
+	if notify := s.mgr.cfg.OnPermissionRequest; notify != nil {
+		optionIDs := make([]string, len(options))
+		for i, o := range options {
+			optionIDs[i] = o.OptionID
+		}
+		go notify(s.ID, requestID, title, optionIDs)
+	}
 
 	select {
 	case optionID := <-p.ch:

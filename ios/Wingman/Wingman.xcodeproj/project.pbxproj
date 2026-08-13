@@ -12,6 +12,7 @@
 		2D15653EBD475A19CD4B599F /* WingmanKit in Frameworks */ = {isa = PBXBuildFile; productRef = FEE9BA270316673DC34BECE4 /* WingmanKit */; };
 		4B41F3CB47E6BE0B5EDF98B5 /* RichText.swift in Sources */ = {isa = PBXBuildFile; fileRef = 16299CBA8A9BDE5765EB3F34 /* RichText.swift */; };
 		4EFEA4BB5EED595D50DA5196 /* SessionDetailView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A7ED1169B3602A9E880E4829 /* SessionDetailView.swift */; };
+		7291A3FA35BCEFB7A1DB2B63 /* PushCoordinator.swift in Sources */ = {isa = PBXBuildFile; fileRef = 7FE1F47BA0F85DD740A3D00A /* PushCoordinator.swift */; };
 		7D81DB92BC9C3865663D93F8 /* SpeechRecognizer.swift in Sources */ = {isa = PBXBuildFile; fileRef = B3012B134C07BD5BA70A7525 /* SpeechRecognizer.swift */; };
 		A1460A62777AF2785425A7D4 /* AppStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = FA6CFF61A53BF526348D6416 /* AppStore.swift */; };
 		BB494E4EC4D50CACF7F620BA /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 724EBB69B885EFCA0026BCC5 /* SettingsView.swift */; };
@@ -26,6 +27,7 @@
 		59079017CB797CC1FD7934C1 /* Theme.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Theme.swift; sourceTree = "<group>"; };
 		724EBB69B885EFCA0026BCC5 /* SettingsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SettingsView.swift; sourceTree = "<group>"; };
 		76B66866D50E48470A04C811 /* WingmanApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = WingmanApp.swift; sourceTree = "<group>"; };
+		7FE1F47BA0F85DD740A3D00A /* PushCoordinator.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PushCoordinator.swift; sourceTree = "<group>"; };
 		82BF2E26970C2A88BEA11D29 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		8F855A6CED25F20636F63009 /* PairingView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PairingView.swift; sourceTree = "<group>"; };
 		9DE643D98754CE9814885F3C /* Keychain.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Keychain.swift; sourceTree = "<group>"; };
@@ -34,6 +36,7 @@
 		B38115FCFA4100C5AEBDA794 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist; path = Info.plist; sourceTree = "<group>"; };
 		CBD1FBE2F2543D4430FFFAEC /* WingmanKit */ = {isa = PBXFileReference; lastKnownFileType = folder; name = WingmanKit; path = ../WingmanKit; sourceTree = SOURCE_ROOT; };
 		D97F85B8282F37E75E4E7088 /* SessionListView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SessionListView.swift; sourceTree = "<group>"; };
+		F1C685C20A24852CBFD43025 /* Wingman.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = Wingman.entitlements; sourceTree = "<group>"; };
 		F2FE628C0697A064C96F62AF /* Wingman.app */ = {isa = PBXFileReference; includeInIndex = 0; lastKnownFileType = wrapper.application; path = Wingman.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		FA6CFF61A53BF526348D6416 /* AppStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = AppStore.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
@@ -75,12 +78,14 @@
 				B38115FCFA4100C5AEBDA794 /* Info.plist */,
 				9DE643D98754CE9814885F3C /* Keychain.swift */,
 				8F855A6CED25F20636F63009 /* PairingView.swift */,
+				7FE1F47BA0F85DD740A3D00A /* PushCoordinator.swift */,
 				16299CBA8A9BDE5765EB3F34 /* RichText.swift */,
 				A7ED1169B3602A9E880E4829 /* SessionDetailView.swift */,
 				D97F85B8282F37E75E4E7088 /* SessionListView.swift */,
 				724EBB69B885EFCA0026BCC5 /* SettingsView.swift */,
 				B3012B134C07BD5BA70A7525 /* SpeechRecognizer.swift */,
 				59079017CB797CC1FD7934C1 /* Theme.swift */,
+				F1C685C20A24852CBFD43025 /* Wingman.entitlements */,
 				76B66866D50E48470A04C811 /* WingmanApp.swift */,
 			);
 			path = Wingman;
@@ -173,6 +178,7 @@
 				A1460A62777AF2785425A7D4 /* AppStore.swift in Sources */,
 				E9CF1EF44C122606783F2519 /* Keychain.swift in Sources */,
 				08B61B7CBFADFEC9040B8089 /* PairingView.swift in Sources */,
+				7291A3FA35BCEFB7A1DB2B63 /* PushCoordinator.swift in Sources */,
 				4B41F3CB47E6BE0B5EDF98B5 /* RichText.swift in Sources */,
 				4EFEA4BB5EED595D50DA5196 /* SessionDetailView.swift in Sources */,
 				FE5C50A4ADD7272502583280 /* SessionListView.swift in Sources */,
@@ -191,6 +197,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Wingman/Wingman.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
@@ -214,6 +221,7 @@
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = Wingman/Wingman.entitlements;
 				CODE_SIGN_IDENTITY = "iPhone Developer";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;

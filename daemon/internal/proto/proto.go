@@ -33,6 +33,7 @@ const (
 	CmdDirsList       = "dirs.list"
 	CmdPairRequest    = "pair.request"
 	CmdPairRemove     = "pair.remove"
+	CmdPushRegister   = "push.register"
 )
 
 // Event types (daemon → phone).
@@ -72,6 +73,13 @@ type SessionWatch struct {
 type PairRequest struct {
 	Token      string `json:"token"`
 	DeviceName string `json:"deviceName"`
+}
+
+// PushRegister registers the device's APNs token for permission alerts.
+type PushRegister struct {
+	Token      string `json:"token"`
+	Env        string `json:"env"` // "production" | "sandbox"
+	DeviceName string `json:"deviceName,omitempty"`
 }
 
 // Result is the payload of every "res" reply.

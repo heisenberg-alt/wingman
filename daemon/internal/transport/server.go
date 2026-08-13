@@ -17,6 +17,7 @@ import (
 	"github.com/coder/websocket"
 
 	"github.com/heisenberg-alt/wingman/daemon/internal/proto"
+	"github.com/heisenberg-alt/wingman/daemon/internal/push"
 	"github.com/heisenberg-alt/wingman/daemon/internal/securechan"
 	"github.com/heisenberg-alt/wingman/daemon/internal/session"
 	"github.com/heisenberg-alt/wingman/daemon/internal/wsconn"
@@ -25,6 +26,8 @@ import (
 // Server handles clients speaking the Wingman protocol.
 type Server struct {
 	Manager *session.Manager
+	// PushTokens, when set, accepts push.register commands (Phase 4).
+	PushTokens *push.Registry
 }
 
 // Handler returns the HTTP handler for the loopback /ws endpoint.
@@ -197,6 +200,18 @@ func (c *client) handle(ctx context.Context, env proto.Envelope) {
 
 	case proto.CmdDirsList:
 		c.reply(ctx, env, proto.DirsList{Dirs: c.srv.Manager.RecentDirs()}, nil)
+
+	case proto.CmdPushRegister:
+		if c.srv.PushTokens == nil {
+			c.reply(ctx, env, nil, errors.New("push notifications are not configured on this daemon"))
+			return
+		}
+		var p proto.PushRegister
+		if err := json.Unmarshal(env.Payload, &p); err != nil {
+			c.reply(ctx, env, nil, err)
+			return
+		}
+		c.reply(ctx, env, nil, c.srv.PushTokens.Register(p.Token, p.Env, p.DeviceName))
 
 	case proto.CmdPairRemove:
 		if c.unpair == nil {
