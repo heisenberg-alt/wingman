@@ -218,7 +218,7 @@ func TestCommandsForUnknownSessionFail(t *testing.T) {
 }
 
 func TestDirsListAndSessionRemove(t *testing.T) {
-	srv, hts := newServer(t)
+	_, hts := newServer(t)
 	c := dial(t, hts)
 
 	cwd := t.TempDir()
@@ -240,40 +240,9 @@ func TestDirsListAndSessionRemove(t *testing.T) {
 		t.Errorf("dirs = %v, want %q first", dirs.Dirs, cwd)
 	}
 
-	// Removing a live session is rejected.
-	if res := c.call(proto.CmdSessionRemove, info.ID, nil); res.OK {
-		t.Fatal("removed a non-terminal session")
-	}
-
-	// Force the session into a terminal state, then removal should succeed.
-	srv.Manager.CloseAll()
-	deadline := time.Now().Add(5 * time.Second)
-	for {
-		res := c.call(proto.CmdSessionList, "", nil)
-		if !res.OK {
-			t.Fatalf("list: %s", res.Error)
-		}
-		var list proto.SessionList
-		_ = json.Unmarshal(res.Data, &list)
-
-		status := ""
-		for _, s := range list.Sessions {
-			if s.ID == info.ID {
-				status = s.Status
-				break
-			}
-		}
-		if status == session.StatusDone || status == session.StatusError {
-			break
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("session never reached a terminal state, last status=%q", status)
-		}
-		time.Sleep(50 * time.Millisecond)
-	}
-
+	// Removing the idle session succeeds and releases it.
 	if res := c.call(proto.CmdSessionRemove, info.ID, nil); !res.OK {
-		t.Fatalf("remove terminal: %s", res.Error)
+		t.Fatalf("remove idle: %s", res.Error)
 	}
 
 	res = c.call(proto.CmdSessionList, "", nil)

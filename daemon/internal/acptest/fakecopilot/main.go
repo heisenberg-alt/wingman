@@ -87,6 +87,16 @@ func handle(m inMessage) {
 	case "session/new":
 		respond(m.ID, map[string]any{"sessionId": "fake-session-1"})
 
+	case "session/load":
+		// Replay history before responding, mirroring real agents: the
+		// daemon must suppress these (it already has them persisted).
+		var p struct {
+			SessionID string `json:"sessionId"`
+		}
+		_ = json.Unmarshal(m.Params, &p)
+		update(p.SessionID, textChunk("REPLAYED-HISTORY"))
+		respond(m.ID, map[string]any{})
+
 	case "session/prompt":
 		var p struct {
 			SessionID string `json:"sessionId"`

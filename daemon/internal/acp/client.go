@@ -195,6 +195,17 @@ func (c *Client) NewSession(ctx context.Context, cwd string) (string, error) {
 	return res.SessionID, nil
 }
 
+// LoadSession reattaches to an existing ACP session after a restart. The
+// agent replays the session's history as session/update notifications before
+// responding.
+func (c *Client) LoadSession(ctx context.Context, sessionID, cwd string) error {
+	return c.Call(ctx, "session/load", LoadSessionParams{
+		SessionID:  sessionID,
+		Cwd:        cwd,
+		McpServers: []any{},
+	}, nil)
+}
+
 // Prompt sends a user turn and blocks until the turn ends.
 func (c *Client) Prompt(ctx context.Context, sessionID, text string) (*PromptResult, error) {
 	var res PromptResult

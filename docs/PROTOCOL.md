@@ -54,7 +54,7 @@ All messages are JSON objects with a common envelope:
 | `session.cancel` | – | `{}` |
 | `session.watch` | `{ fromSeq }` | `{}` then event stream |
 | `session.unwatch` | – | `{}` |
-| `session.remove` | – | `{}` — only sessions in a terminal state (`done`, `error`) |
+| `session.remove` | – | `{}` — rejected while a turn is running or awaiting permission |
 | `dirs.list` | – | `{ dirs: [string] }` — recent working directories, most recent first |
 
 Every command receives exactly one reply:
@@ -90,8 +90,10 @@ Every command receives exactly one reply:
 ## Session identity
 
 Session ids in this protocol are daemon-generated and stable across daemon
-restarts (Phase 2+, backed by `session/load`). The underlying ACP session id is
-an implementation detail and never leaves the daemon.
+restarts: sessions and their event logs are persisted on the host, restored
+at startup, and reattached to Copilot on the next prompt via ACP
+`session/load` (see ADR-0005). The underlying ACP session id is an
+implementation detail and never leaves the daemon.
 
 ## Relay rendezvous
 
