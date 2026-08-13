@@ -132,9 +132,16 @@ func (m *Manager) Create(ctx context.Context, cwd string) (*Session, error) {
 		}
 		log, err := OpenLog(filepath.Join(s.dir, "log.jsonl"))
 		if err != nil {
+			_ = os.RemoveAll(s.dir)
 			return nil, err
 		}
 		s.Log = log
+		defer func() {
+			if s.acpID == "" { // failed after persistence setup
+				_ = s.Log.Close()
+				_ = os.RemoveAll(s.dir)
+			}
+		}()
 	} else {
 		s.Log = NewLog()
 	}
