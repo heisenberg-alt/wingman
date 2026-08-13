@@ -257,7 +257,7 @@ func cmdDevices(args []string) {
 	}
 
 	switch {
-	case len(rest) == 0 || rest[0] == "list":
+	case len(rest) == 0 || (rest[0] == "list" && len(rest) == 1):
 		devices := registry.List()
 		if len(devices) == 0 {
 			fmt.Println("no paired devices")
