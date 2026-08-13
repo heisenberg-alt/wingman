@@ -412,7 +412,6 @@ func (s *Session) onRequest(ctx context.Context, method string, params json.RawM
 		ToolCall:  req.ToolCall,
 		Options:   options,
 	})
-	defer s.setStatus(StatusRunning)
 
 	select {
 	case optionID := <-p.ch:
@@ -421,6 +420,11 @@ func (s *Session) onRequest(ctx context.Context, method string, params json.RawM
 			return acp.RequestPermissionResult{Outcome: acp.PermissionOutcome{Outcome: "cancelled"}}, nil
 		}
 		s.Log.Append(proto.EvtPermissionResolved, proto.PermissionResolved{RequestID: requestID, OptionID: optionID, ResolvedBy: "phone"})
+		// The turn continues only on this path; restore running before the
+		// result reaches the CLI. Every other branch returns a cancelled
+		// outcome, which ends the turn — setting running there races the
+		// prompt goroutine's terminal status and can strand the session.
+		s.setStatus(StatusRunning)
 		return acp.RequestPermissionResult{Outcome: acp.PermissionOutcome{Outcome: "selected", OptionID: optionID}}, nil
 
 	case <-time.After(s.mgr.cfg.PermissionTimeout):
