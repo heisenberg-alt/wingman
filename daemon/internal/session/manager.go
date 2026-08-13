@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/heisenberg-alt/wingman/daemon/internal/acp"
@@ -48,11 +49,15 @@ type Manager struct {
 	mu       sync.Mutex
 	sessions map[string]*Session
 	recent   []string // most recent first, capped
+	// closing suppresses subprocess-exit status changes during CloseAll so
+	// a graceful shutdown doesn't mark resumable sessions done/error.
+	closing atomic.Bool
 }
 
 const maxRecentDirs = 20
 
-// NewManager creates a Manager.
+// NewManager creates a Manager, restoring any sessions persisted under
+// cfg.StateDir from a previous run.
 func NewManager(cfg Config) *Manager {
 	if cfg.CopilotPath == "" {
 		cfg.CopilotPath = "copilot"
@@ -65,21 +70,29 @@ func NewManager(cfg Config) *Manager {
 	}
 	m := &Manager{cfg: cfg, sessions: make(map[string]*Session)}
 	m.loadRecentDirs()
+	m.restoreSessions()
 	return m
 }
 
-// Session is one live Copilot ACP session.
+// Session is one live or dormant Copilot ACP session. Dormant sessions
+// (restored from disk, no subprocess) are respawned lazily on the next
+// prompt via ACP session/load.
 type Session struct {
 	ID        string
 	Cwd       string
 	CreatedAt time.Time
 	Log       *Log
 
-	mgr    *Manager
-	client *acp.Client
-	acpID  string
+	mgr   *Manager
+	acpID string
+	dir   string // persistence dir; "" = in-memory only
+
+	// suppress drops ACP notifications while session/load replays history
+	// the daemon already has persisted.
+	suppress atomic.Bool
 
 	mu      sync.Mutex
+	client  *acp.Client // nil while dormant
 	status  string
 	pending map[string]*pendingPermission
 }
@@ -107,10 +120,23 @@ func (m *Manager) Create(ctx context.Context, cwd string) (*Session, error) {
 		ID:        newID(),
 		Cwd:       cwd,
 		CreatedAt: time.Now().UTC(),
-		Log:       NewLog(),
 		mgr:       m,
 		status:    StatusStarting,
 		pending:   make(map[string]*pendingPermission),
+	}
+
+	if root := m.sessionsRoot(); root != "" {
+		s.dir = filepath.Join(root, s.ID)
+		if err := os.MkdirAll(s.dir, 0o700); err != nil {
+			return nil, fmt.Errorf("session dir: %w", err)
+		}
+		log, err := OpenLog(filepath.Join(s.dir, "log.jsonl"))
+		if err != nil {
+			return nil, err
+		}
+		s.Log = log
+	} else {
+		s.Log = NewLog()
 	}
 
 	// Deliberately not ctx: the subprocess must outlive the creating
@@ -137,11 +163,27 @@ func (m *Manager) Create(ctx context.Context, cwd string) (*Session, error) {
 	}
 	s.acpID = acpID
 	s.setStatus(StatusIdle)
+	s.watchExit(client)
 
-	// Reap: when the subprocess exits, a session that was idle completed
-	// normally; anything else is an error.
+	m.mu.Lock()
+	m.sessions[s.ID] = s
+	m.mu.Unlock()
+	m.rememberDir(cwd)
+
+	m.cfg.Logger.Info("session created", "id", s.ID, "cwd", cwd)
+	return s, nil
+}
+
+// watchExit reaps the subprocess: when it exits outside a graceful daemon
+// shutdown, a session that was idle completed normally; anything else is an
+// error. During CloseAll the status is left untouched so the persisted
+// session stays resumable after a restart.
+func (s *Session) watchExit(client *acp.Client) {
 	go func() {
 		<-client.Done()
+		if s.mgr.closing.Load() {
+			return
+		}
 		s.mu.Lock()
 		st := s.status
 		s.mu.Unlock()
@@ -152,14 +194,47 @@ func (m *Manager) Create(ctx context.Context, cwd string) (*Session, error) {
 			s.setStatus(StatusError)
 		}
 	}()
+}
 
-	m.mu.Lock()
-	m.sessions[s.ID] = s
-	m.mu.Unlock()
-	m.rememberDir(cwd)
+// ensureClient respawns the Copilot subprocess for a dormant (restored)
+// session and reattaches to its conversation via ACP session/load. Callers
+// hold the busy status, so at most one resume runs at a time. History
+// replayed by session/load is suppressed — it is already in the log.
+func (s *Session) ensureClient(ctx context.Context) error {
+	s.mu.Lock()
+	if s.client != nil {
+		s.mu.Unlock()
+		return nil
+	}
+	s.mu.Unlock()
 
-	m.cfg.Logger.Info("session created", "id", s.ID, "cwd", cwd)
-	return s, nil
+	client, err := acp.Spawn(context.Background(), acp.Options{
+		Command:        s.mgr.cfg.CopilotPath,
+		Dir:            s.Cwd,
+		OnNotification: s.onNotification,
+		OnRequest:      s.onRequest,
+	})
+	if err != nil {
+		return err
+	}
+	if _, err := client.Initialize(ctx); err != nil {
+		client.Close()
+		return fmt.Errorf("initialize: %w", err)
+	}
+	s.suppress.Store(true)
+	err = client.LoadSession(ctx, s.acpID, s.Cwd)
+	s.suppress.Store(false)
+	if err != nil {
+		client.Close()
+		return fmt.Errorf("session/load: %w", err)
+	}
+
+	s.mu.Lock()
+	s.client = client
+	s.mu.Unlock()
+	s.watchExit(client)
+	s.mgr.cfg.Logger.Info("session resumed", "id", s.ID)
+	return nil
 }
 
 // Get returns a session by id.
@@ -189,17 +264,24 @@ func (m *Manager) List() []proto.SessionInfo {
 	return out
 }
 
-// CloseAll terminates every session subprocess.
+// CloseAll terminates every live session subprocess without disturbing the
+// sessions' persisted statuses, so they restore as resumable.
 func (m *Manager) CloseAll() {
+	m.closing.Store(true)
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	for _, s := range m.sessions {
-		_ = s.client.Close()
+		s.mu.Lock()
+		c := s.client
+		s.mu.Unlock()
+		if c != nil {
+			_ = c.Close()
+		}
 	}
 }
 
-// Remove deletes a session that has reached a terminal state (done or
-// error), releasing its subprocess.
+// Remove deletes a session that is not in an active turn, releasing its
+// subprocess and any persisted state.
 func (m *Manager) Remove(id string) error {
 	m.mu.Lock()
 	s, ok := m.sessions[id]
@@ -207,14 +289,26 @@ func (m *Manager) Remove(id string) error {
 		m.mu.Unlock()
 		return fmt.Errorf("unknown session %q", id)
 	}
-	if st := s.Info().Status; st != StatusDone && st != StatusError {
+	switch st := s.Info().Status; st {
+	case StatusRunning, StatusAwaitingPermission, StatusStarting:
 		m.mu.Unlock()
-		return fmt.Errorf("session is %s; only done or error sessions can be removed", st)
+		return fmt.Errorf("session is %s; cancel or wait for the turn to end first", st)
 	}
 	delete(m.sessions, id)
 	m.mu.Unlock()
 
-	_ = s.client.Close()
+	s.mu.Lock()
+	c := s.client
+	s.mu.Unlock()
+	if c != nil {
+		_ = c.Close()
+	}
+	_ = s.Log.Close()
+	if s.dir != "" {
+		if err := os.RemoveAll(s.dir); err != nil {
+			m.cfg.Logger.Warn("remove session dir", "id", id, "err", err)
+		}
+	}
 	m.cfg.Logger.Info("session removed", "id", id)
 	return nil
 }
@@ -310,10 +404,26 @@ func (s *Session) SendPrompt(text string) error {
 	}
 	s.status = StatusRunning
 	s.mu.Unlock()
+	s.persistMeta()
 	s.Log.Append(proto.EvtSessionState, proto.SessionState{Status: StatusRunning})
 
 	go func() {
-		res, err := s.client.Prompt(context.Background(), s.acpID, text)
+		// A dormant (restored) session has no subprocess yet: respawn and
+		// reattach before prompting.
+		resumeCtx, cancel := context.WithTimeout(context.Background(), time.Minute)
+		err := s.ensureClient(resumeCtx)
+		cancel()
+		if err != nil {
+			s.mgr.cfg.Logger.Warn("resume failed", "session", s.ID, "err", err)
+			s.Log.Append(proto.EvtTurnEnded, proto.TurnEnded{StopReason: "error: " + err.Error()})
+			s.setStatus(StatusError)
+			return
+		}
+		s.mu.Lock()
+		client := s.client
+		s.mu.Unlock()
+
+		res, err := client.Prompt(context.Background(), s.acpID, text)
 		if err != nil {
 			s.mgr.cfg.Logger.Warn("prompt failed", "session", s.ID, "err", err)
 			s.Log.Append(proto.EvtTurnEnded, proto.TurnEnded{StopReason: "error: " + err.Error()})
@@ -344,7 +454,13 @@ func (s *Session) Approve(requestID, optionID string) error {
 
 // Cancel interrupts the current turn.
 func (s *Session) Cancel() error {
-	return s.client.Cancel(s.acpID)
+	s.mu.Lock()
+	c := s.client
+	s.mu.Unlock()
+	if c == nil {
+		return errors.New("session has no active turn")
+	}
+	return c.Cancel(s.acpID)
 }
 
 func (s *Session) setStatus(status string) {
@@ -355,6 +471,7 @@ func (s *Session) setStatus(status string) {
 	}
 	s.status = status
 	s.mu.Unlock()
+	s.persistMeta()
 	s.Log.Append(proto.EvtSessionState, proto.SessionState{Status: status})
 }
 
@@ -362,6 +479,9 @@ func (s *Session) setStatus(status string) {
 func (s *Session) onNotification(method string, params json.RawMessage) {
 	if method != "session/update" {
 		return
+	}
+	if s.suppress.Load() {
+		return // session/load replaying history the log already holds
 	}
 	var note acp.SessionNotification
 	if err := json.Unmarshal(params, &note); err != nil {

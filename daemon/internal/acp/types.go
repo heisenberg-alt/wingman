@@ -36,6 +36,14 @@ type NewSessionResult struct {
 	SessionID string `json:"sessionId"`
 }
 
+// LoadSessionParams reattaches to an existing session by its agent-assigned
+// id after the client (or agent) restarted.
+type LoadSessionParams struct {
+	SessionID  string `json:"sessionId"`
+	Cwd        string `json:"cwd"`
+	McpServers []any  `json:"mcpServers"`
+}
+
 // ContentBlock is a single piece of prompt or response content.
 type ContentBlock struct {
 	Type string `json:"type"`

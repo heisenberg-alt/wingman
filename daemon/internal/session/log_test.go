@@ -1,6 +1,7 @@
 package session
 
 import (
+	"os"
 	"testing"
 	"time"
 )
@@ -86,5 +87,73 @@ func TestSlowSubscriberDropsButLogRetains(t *testing.T) {
 	}
 	if got := len(l.Since(0)); got != 500 {
 		t.Fatalf("log retained %d events, want 500", got)
+	}
+}
+
+func TestOpenLogPersistsAndReplays(t *testing.T) {
+	path := t.TempDir() + "/log.jsonl"
+
+	l1, err := OpenLog(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	l1.Append("a", map[string]int{"n": 1})
+	l1.Append("b", map[string]int{"n": 2})
+	if err := l1.Close(); err != nil {
+		t.Fatal(err)
+	}
+
+	l2, err := OpenLog(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l2.Close()
+	events := l2.Since(0)
+	if len(events) != 2 || events[0].Type != "a" || events[1].Type != "b" {
+		t.Fatalf("replayed events = %+v", events)
+	}
+	// Appends continue the seq after a reload.
+	if evt := l2.Append("c", nil); evt.Seq != 3 {
+		t.Fatalf("seq after reload = %d, want 3", evt.Seq)
+	}
+}
+
+func TestOpenLogDiscardsTornFinalLine(t *testing.T) {
+	path := t.TempDir() + "/log.jsonl"
+
+	l1, err := OpenLog(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	l1.Append("a", nil)
+	_ = l1.Close()
+
+	// Simulate a crash mid-write: a torn, newline-less final line.
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_APPEND, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, _ = f.WriteString(`{"seq":2,"type":"tor`)
+	_ = f.Close()
+
+	l2, err := OpenLog(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := len(l2.Since(0)); got != 1 {
+		t.Fatalf("events after torn line = %d, want 1", got)
+	}
+	// The torn bytes were truncated away, so new appends survive a reload.
+	l2.Append("b", nil)
+	_ = l2.Close()
+
+	l3, err := OpenLog(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer l3.Close()
+	events := l3.Since(0)
+	if len(events) != 2 || events[1].Type != "b" {
+		t.Fatalf("events after torn-line recovery = %+v", events)
 	}
 }
